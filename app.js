@@ -13,6 +13,21 @@ const INTERESTS = ["Hiking","Beaches","Food","Museums","Nightlife","Photography"
 const STYLES = ["Slow travel","Adventure","Luxury","Backpacking","Culture","Foodie"];
 const GENDERS = ["Woman","Man","Non-binary"];
 const PALETTE = ["#3F5A4A","#8A4B3C","#5B4E7A","#2F5D6B","#7A5C2E","#6B3F55","#44614F","#9A5A3A"];
+const ICEBREAKERS = [
+  "✈️ Window seat or aisle seat?",
+  "🎒 Backpack light or heavy overpacker?",
+  "☕ Morning sunrise coffee or sunset drinks?",
+  "🗺️ What's top of your travel bucket list?",
+  "🍜 Street food stalls or local hidden cafes?"
+];
+const VIBE_IDEAS = {
+  "Adventure": ["Sunrise hike", "Scooter exploration", "Cliff jumping", "Night trail walk"],
+  "Foodie": ["Morning local market", "Street food crawl", "Coffee tasting", "Cooking class"],
+  "Slow travel": ["Lazy café reading", "Sunset viewpoint picnic", "Botanical garden stroll", "Historic walk"],
+  "Backpacking": ["Hostel meetup", "Scenic bus route", "Free walking tour", "Budget viewpoint hike"],
+  "Luxury": ["Rooftop sunset cocktails", "Fine dining dinner", "Spa afternoon", "Scenic harbor boat"],
+  "Culture": ["Art gallery visit", "Ancient temple walk", "Folk museum exploration", "Local craft workshop"]
+};
 
 const S = {db:null,user:null,me:null,canWrite:true,profiles:{},likes:{},chats:{},trips:{},groups:{},joins:{},
   tab:"discover",view:null,draft:{},sub:{},seenMatches:null,groupFilter:"foryou",editing:false};
@@ -150,9 +165,71 @@ function keepInputs(){const o={};document.querySelectorAll("[data-keep]").forEac
 function restoreInputs(k){document.querySelectorAll("[data-keep]").forEach(el=>{if(k.o[el.dataset.keep]!==undefined)el.value=k.o[el.dataset.keep]});
   if(k.focus){const el=document.querySelector(`[data-keep="${k.focus}"]`);if(el){el.focus();try{el.setSelectionRange(k.sel,k.sel)}catch{}}}}
 
+function initSwipe(){
+  const card = $("#active-card");
+  if(!card || card._swipedInit) return;
+  card._swipedInit = true;
+  const likeStamp = $("#stamp-like");
+  const nopeStamp = $("#stamp-nope");
+  let startX = 0, startY = 0, curX = 0, curY = 0, dragging = false;
+
+  card.addEventListener("pointerdown", e => {
+    if(e.target.closest("button") || e.target.closest(".chip")) return;
+    dragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    curX = 0; curY = 0;
+    card.classList.remove("anim-reset", "anim-fly-like", "anim-fly-pass");
+    card.setPointerCapture(e.pointerId);
+  });
+
+  card.addEventListener("pointermove", e => {
+    if(!dragging) return;
+    curX = e.clientX - startX;
+    curY = e.clientY - startY;
+    const rot = (curX / 300) * 16;
+    card.style.transform = `translate(${curX}px, ${curY * 0.25}px) rotate(${rot}deg)`;
+    if(curX > 0){
+      if(likeStamp) likeStamp.style.opacity = Math.min(curX / 80, 1);
+      if(nopeStamp) nopeStamp.style.opacity = 0;
+    } else {
+      if(nopeStamp) nopeStamp.style.opacity = Math.min(-curX / 80, 1);
+      if(likeStamp) likeStamp.style.opacity = 0;
+    }
+  });
+
+  const finish = e => {
+    if(!dragging) return;
+    dragging = false;
+    try { card.releasePointerCapture(e.pointerId); } catch {}
+    const threshold = 100;
+    const cid = card.dataset.cid;
+    if(curX > threshold){
+      card.classList.add("anim-fly-like");
+      if(likeStamp) likeStamp.style.opacity = 1;
+      setTimeout(() => decide(cid, true), 220);
+    } else if(curX < -threshold){
+      card.classList.add("anim-fly-pass");
+      if(nopeStamp) nopeStamp.style.opacity = 1;
+      setTimeout(() => decide(cid, false), 220);
+    } else {
+      card.classList.add("anim-reset");
+      card.style.transform = "";
+      if(likeStamp) likeStamp.style.opacity = 0;
+      if(nopeStamp) nopeStamp.style.opacity = 0;
+    }
+  };
+
+  card.addEventListener("pointerup", finish);
+  card.addEventListener("pointercancel", finish);
+}
+
 function render(){
   const app=$("#app"); const k=keepInputs();
-  if(!S.loaded){app.innerHTML='<div class="spin"></div>';return}
+  if(!S.loaded){
+    app.innerHTML=`<div class="eyebrow" style="opacity:.6">Roammate</div><div class="skeleton-card" style="margin-top:14px"></div>`;
+    return;
+  }
   if(!myP() || S.editing){ $("#nav").hidden=!myP(); app.innerHTML=profileForm(!myP()); if(myP())renderNav(); restoreInputs(k); return; }
   renderNav();
   let html="";
@@ -161,6 +238,7 @@ function render(){
   else if(S.view?.type==="group") html=groupView(S.view.id);
   else html=({discover:discoverView,matches:matchesView,trips:tripsView,groups:groupsView,profile:profileView})[S.tab]();
   app.innerHTML=html; restoreInputs(k);
+  if(S.tab==="discover" && !S.view && !S.editing) initSwipe();
 }
 function renderNav(){
   const n=$("#nav");n.hidden=false;const u=unread();
@@ -225,17 +303,22 @@ function discoverView(){
     const cardAv = p.photoURL
       ? `<div class="bigav has-img" style="background-image:url('${esc(p.photoURL)}')"></div>`
       : `<div class="bigav">${initial(p.name)}</div>`;
-    body=`<div class="pcard" style="background:linear-gradient(160deg,${color(id)}cc,${color(id)} 55%,#1d1a18)">
-      ${p.demo?'<span class="demo">Demo profile</span>':""}<span class="score">${pct}% match</span>
-      ${cardAv}
-      <h2>${esc(p.name)}, ${esc(p.age)}</h2>
-      <div class="small" style="opacity:.85;display:flex;align-items:center;gap:4px">${ICON.pin}${esc(p.city||"Somewhere")} · ${esc(p.travelStyle||"")}</div>
-      ${p.bio?`<p style="margin:10px 0 12px">${esc(p.bio)}</p>`:'<div style="height:10px"></div>'}
-      <div class="chips">${(p.interests||[]).slice(0,6).map(i=>`<span class="chip static">${esc(i)}</span>`).join("")}</div>
-      ${shared?`<div class="small" style="opacity:.8;margin-top:10px">${shared} shared interest${shared>1?"s":""}</div>`:""}
+    body=`<div class="pcard-wrap">
+      <div class="pcard swiping" id="active-card" data-cid="${id}" style="background:linear-gradient(160deg,${color(id)}cc,${color(id)} 55%,#1d1a18)">
+        <div class="stamp like" id="stamp-like">LIKE</div>
+        <div class="stamp nope" id="stamp-nope">NOPE</div>
+        ${p.demo?'<span class="demo">Demo profile</span>':""}<span class="score">${pct}% match</span>
+        ${cardAv}
+        <h2>${esc(p.name)}, ${esc(p.age)}</h2>
+        <div class="small" style="opacity:.85;display:flex;align-items:center;gap:4px">${ICON.pin}${esc(p.city||"Somewhere")} · ${esc(p.travelStyle||"")}</div>
+        ${p.bio?`<p style="margin:10px 0 12px">${esc(p.bio)}</p>`:'<div style="height:10px"></div>'}
+        <div class="chips">${(p.interests||[]).slice(0,6).map(i=>`<span class="chip static">${esc(i)}</span>`).join("")}</div>
+        ${shared?`<div class="small" style="opacity:.8;margin-top:10px">${shared} shared interest${shared>1?"s":""}</div>`:""}
+      </div>
     </div>
     <div class="actions"><button class="circle" data-act="pass" data-v="${id}" aria-label="Pass">${ICON.x}</button>
-    <button class="circle like" data-act="like" data-v="${id}" aria-label="Like">${ICON.heart}</button></div>`;
+    <button class="circle like" data-act="like" data-v="${id}" aria-label="Like">${ICON.heart}</button></div>
+    <div class="small muted" style="text-align:center;margin-top:10px;opacity:.7">Swipe or keyboard ← Pass · Like →</div>`;
   }
   return `<div class="eyebrow">Discover</div><h1>A little chemistry.<br><em>A lot of possibility.</em></h1>
   <p class="sub">Curated for your travel style and the way you want to connect.</p>
@@ -243,12 +326,31 @@ function discoverView(){
   ${body}`;
 }
 function showMatch(id){
-  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal" style="text-align:center">
-    <div class="row" style="justify-content:center;gap:0;margin:8px 0 14px"><div style="flex:none">${av(S.me,myP().name,"lg")}</div><div style="flex:none;margin-left:-14px">${av(id,pname(id),"lg")}</div></div>
-    <div class="eyebrow">It's a match</div><h1>You and ${esc(pname(id))}<br><em>clicked.</em></h1>
-    <p class="sub">Say hello now, and plan a trip together when it feels right.</p>
-    <button class="btn primary" data-act="openchat" data-v="${id}">Send a message</button>
-    <button class="btn ghost" style="margin-top:8px" data-act="closemodal">Keep exploring</button></div></div>`;
+  const colors = ["#C2462E", "#3F5A4A", "#F59E0B", "#10B981", "#3B82F6", "#EC4899", "#8B5CF6"];
+  const pieces = Array.from({length: 40}).map((_, i) => {
+    const bg = colors[i % colors.length];
+    const left = Math.floor(Math.random() * 94);
+    const dur = (1.5 + Math.random() * 1.8).toFixed(2);
+    const delay = (Math.random() * 0.7).toFixed(2);
+    const w = Math.floor(8 + Math.random() * 5);
+    const h = Math.floor(11 + Math.random() * 6);
+    return `<div class="confetti-piece" style="left:${left}%;top:-10px;background:${bg};width:${w}px;height:${h}px;animation-duration:${dur}s;animation-delay:${delay}s"></div>`;
+  }).join("");
+
+  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal">
+    <div class="confetti-box">${pieces}</div>
+    <div class="modal" style="text-align:center;position:relative;z-index:16">
+      <div class="row" style="justify-content:center;gap:0;margin:8px 0 16px">
+        <div style="flex:none" class="match-pulse">${av(S.me,myP()?.name||"You","lg")}</div>
+        <div style="flex:none;margin-left:-18px" class="match-pulse">${av(id,pname(id),"lg")}</div>
+      </div>
+      <div class="eyebrow">It's a mutual spark! ✨</div>
+      <h1 style="font-size:28px;margin:8px 0">You &amp; ${esc(pname(id))}<br><em>matched.</em></h1>
+      <p class="sub" style="margin:4px 0 20px">Turn this travel spark into a shared adventure.</p>
+      <button class="btn primary" data-act="openchat" data-v="${id}">Send a message</button>
+      <button class="btn ghost" style="margin-top:8px" data-act="closemodal">Keep exploring</button>
+    </div>
+  </div>`;
 }
 
 // ----- matches & chat -----
@@ -264,10 +366,16 @@ function chatView(id){
   const cid=chatId(S.me,id); const items=S.sub.key===cid?S.sub.items:[];
   localSet("read:"+cid,Date.now());
   const p=S.profiles[id]||{};
+  const icebreakerHTML = items.length === 0 ? `
+    <div class="icebreakers">
+      <div class="ice-title">✨ Travel Icebreakers — tap to send</div>
+      ${ICEBREAKERS.map(q=>`<div class="ice-chip" data-act="sendice" data-v="${cid}" data-msg="${esc(q)}">${esc(q)}</div>`).join("")}
+    </div>` : "";
   return `<div class="chatwrap"><div><button class="back" data-act="back">${ICON.left} Matches</button>
   <div class="row" style="gap:12px">${av(id,p.name)}<div style="flex:1"><h3>${esc(p.name)}</h3><div class="small muted">${esc(p.city||"")} · ${esc(p.travelStyle||"")}</div></div>
   <button class="btn ghost sm" style="flex:none" data-act="newtrip" data-v="${id}">Plan a trip</button></div></div>
   <div class="msgs"><div class="sys">You matched — say hello to ${esc(p.name)}.</div>
+  ${icebreakerHTML}
   ${items.map(m=>`<div class="msg ${m.from===S.me?"me":""}">${esc(m.text)}<div class="t">${fmtTime(m.at)}</div></div>`).join("")}</div>
   <form class="composer" data-form="msg" data-v="${cid}"><input data-keep="msg_${cid}" placeholder="Write something curious…" maxlength="1000" autocomplete="off" ${S.canWrite?"":"disabled"}>
   <button class="btn primary sm" type="submit" aria-label="Send">${ICON.send}</button></form></div>`;
@@ -291,15 +399,22 @@ function tripDays(tr){
 function tripView(id){
   const tr=S.trips[id]; if(!tr) return `<button class="back" data-act="back">${ICON.left} Trips</button><div class="empty">This trip was removed.</div>`;
   const n=tripDays(tr); const acts=tr.activities||{}; const mm=matches().filter(m=>!(tr.invited||[]).includes(m)&&m!==tr.owner);
+  const vibeList = VIBE_IDEAS[tr.vibe] || VIBE_IDEAS["Slow travel"];
   let days="";
   for(let d=1;d<=n;d++){
     const list=(acts[d]||[]).slice().sort((a,b)=>(a.time||"").localeCompare(b.time||""));
     const date=new Date(new Date(tr.start+"T00:00").getTime()+(d-1)*864e5);
+    const inspirePills = `<div class="inspire-row">${vibeList.map(idea=>`<span class="inspire-pill" data-act="fillact" data-tid="${id}" data-d="${d}" data-txt="${esc(idea)}">+ ${esc(idea)}</span>`).join("")}</div>`;
     days+=`<div class="day"><h3>Day ${d} <span class="muted small" style="font-weight:400">· ${date.toLocaleDateString([], {weekday:"short",day:"numeric",month:"short"})}</span></h3>
-    <div class="card" style="padding:6px 14px">${list.length?list.map(a=>`<div class="act"><span class="dot"></span><div style="flex:1"><div style="font-weight:600">${esc(a.title)}</div>
-      <div class="small muted">${esc(a.time||"Anytime")}${a.by?` · added by ${a.by===S.me?"you":esc(pname(a.by))}`:""}</div></div>
-      <button class="btn ghost sm" data-act="delact" data-v="${id}" data-d="${d}" data-i="${esc(a.id)}" aria-label="Remove"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>`).join("")
-      :`<div class="small muted" style="padding:10px 0">No activities planned yet.</div>`}</div>
+    <div class="card" style="padding:12px 14px">
+      ${list.length?`<div class="timeline">${list.map(a=>`<div class="timeline-item"><div style="display:flex;align-items:flex-start;gap:8px">
+        <div style="flex:1"><span class="time-tag">${esc(a.time||"Anytime")}</span><b>${esc(a.title)}</b>
+        <div class="small muted" style="margin-top:2px">${a.by?`added by ${a.by===S.me?"you":esc(pname(a.by))}`:""}</div></div>
+        <button class="btn ghost sm" data-act="delact" data-v="${id}" data-d="${d}" data-i="${esc(a.id)}" aria-label="Remove" style="padding:4px 8px;margin-top:-2px"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div></div>`).join("")}</div>`
+      :`<div class="small muted" style="padding:4px 0">No activities planned yet.</div>`}
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-top:8px;text-transform:uppercase;letter-spacing:.06em">Idea suggestions</div>
+      ${inspirePills}
+    </div>
     <form class="row" style="margin-top:8px" data-form="act" data-v="${id}" data-d="${d}"><input style="flex:2" data-keep="act_${id}_${d}" placeholder="Add a Day ${d} activity" maxlength="80">
     <input style="flex:1" type="time" data-keep="actt_${id}_${d}"><button class="btn forest sm" style="flex:none" type="submit">Add</button></form></div>`;
   }
@@ -335,9 +450,19 @@ function groupsView(){
   if(S.groupFilter==="mine") list=list.filter(([id,g])=>groupMembers(id).includes(S.me)||g.host===S.me);
   return `<div class="eyebrow">Group travel</div><h1>Go together.<br><em>Make it bigger.</em></h1><p class="sub">Find small groups of curious people heading somewhere beautiful.</p>
   <div class="seg">${[["foryou","For you"],["mine","Joined"]].map(([k,l])=>`<span class="chip ${S.groupFilter===k?"on":""}" data-act="gfilter" data-v="${k}">${l}</span>`).join("")}</div>
-  ${list.length?`<div class="grid2">${list.map(([id,g])=>{const n=groupMembers(id).length;return `<div class="gcard" data-act="opengroup" data-v="${id}">
+  ${list.length?`<div class="grid2">${list.map(([id,g])=>{
+    const mem=groupMembers(id);
+    const cap=+g.capacity||10;
+    const pct=Math.min(Math.round((mem.length/cap)*100),100);
+    const spotsLeft=Math.max(cap-mem.length,0);
+    const isWarn=pct>=75;
+    const previewAvs=mem.slice(0,3).map(u=>av(u,pname(u))).join("");
+    return `<div class="gcard" data-act="opengroup" data-v="${id}">
     <div class="cover" style="background:${color(id)}">${initial(g.title)}</div><h3>${esc(g.title)}</h3>
-    <div class="small muted">${esc(g.place)}</div><div class="small muted">${n}/${esc(g.capacity||10)} travelers${(g.tags||[])[0]?" · "+esc(g.tags[0]):""}</div>
+    <div class="small muted">${esc(g.place)}</div>
+    <div class="cap-meter"><div class="cap-fill ${isWarn?'warn':''}" style="width:${pct}%"></div></div>
+    <div class="small muted">${mem.length}/${cap} travelers · ${spotsLeft>0?spotsLeft+' left':'Full'}</div>
+    ${mem.length?`<div class="av-stack">${previewAvs}</div>`:""}
     ${g.sample?'<span class="tag" style="margin-top:6px">Sample</span>':""}</div>`}).join("")}</div>`
   :`<div class="card empty">${ICON.groups}<h3>${S.groupFilter==="mine"?"You haven't joined a group yet":"No group trips yet"}</h3></div>`}
   <div style="margin-top:16px"><button class="btn primary" data-act="newgroup">+ Host a group trip</button></div>`;
@@ -395,7 +520,27 @@ document.addEventListener("click",async e=>{
   const a=el.dataset.act, v=el.dataset.v;
   if(a==="tab"){closeSubs();S.view=null;S.editing=false;S.tab=v;render();scrollTo(0,0)}
   else if(a==="chip"){el.classList.toggle("on")}
-  else if(a==="like"||a==="pass"){if(!S.canWrite)return toast("View-only access");decide(v,a==="like")}
+  else if(a==="like"||a==="pass"){
+    if(!S.canWrite)return toast("View-only access");
+    const card=$("#active-card");
+    if(card && card.dataset.cid===v){
+      card.classList.add(a==="like"?"anim-fly-like":"anim-fly-pass");
+      const stamp=$(a==="like"?"#stamp-like":"#stamp-nope");
+      if(stamp) stamp.style.opacity=1;
+      setTimeout(()=>decide(v,a==="like"),220);
+    } else {
+      decide(v,a==="like");
+    }
+  }
+  else if(a==="sendice"){
+    const text=el.dataset.msg;
+    if(text) await sendMsg(v,text);
+  }
+  else if(a==="fillact"){
+    const tid=el.dataset.tid, d=el.dataset.d, txt=el.dataset.txt;
+    const inp=document.querySelector(`[data-keep="act_${tid}_${d}"]`);
+    if(inp){ inp.value=txt; inp.focus(); }
+  }
   else if(a==="closemodal"){if(e.target===el||el.tagName==="BUTTON")$("#overlay").innerHTML=""}
   else if(a==="openchat"){$("#overlay").innerHTML="";S.tab="matches";S.view={type:"chat",id:v};openSub(chatId(S.me,v),"chats/"+chatId(S.me,v)+"/msgs");render();}
   else if(a==="back"){closeSubs();S.view=null;render()}
@@ -416,6 +561,25 @@ document.addEventListener("click",async e=>{
   else if(a==="google"){try{await signInWithPopup(S.auth,new GoogleAuthProvider())}catch(err){authError(err)}}
   else if(a==="reset"){const em=document.querySelector('#authform [name=email]')?.value.trim();if(!em)return toast("Enter your email first");try{await sendPasswordResetEmail(S.auth,em);toast("Password reset email sent")}catch(err){authError(err)}}
   else if(a==="leave"){await safe(()=>S.db.doc("joins/"+v+"+"+S.me).delete())}
+});
+
+window.addEventListener("keydown", e => {
+  if(e.target.matches("input, textarea, select")) return;
+  if(S.tab !== "discover" || S.view || S.editing) return;
+  const card = $("#active-card");
+  if(!card) return;
+  const cid = card.dataset.cid;
+  if(e.key === "ArrowRight"){
+    const likeStamp = $("#stamp-like");
+    if(likeStamp) likeStamp.style.opacity = 1;
+    card.classList.add("anim-fly-like");
+    setTimeout(() => decide(cid, true), 220);
+  } else if(e.key === "ArrowLeft"){
+    const nopeStamp = $("#stamp-nope");
+    if(nopeStamp) nopeStamp.style.opacity = 1;
+    card.classList.add("anim-fly-pass");
+    setTimeout(() => decide(cid, false), 220);
+  }
 });
 document.addEventListener("submit",async e=>{
   e.preventDefault(); const f=e.target;
