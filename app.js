@@ -60,7 +60,32 @@ const ICON = {
   send:'<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M3 20.5 21 12 3 3.5l2.5 8.5zM5.5 12H13"/></svg>',
   left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M15 6l-6 6 6 6"/></svg>',
   pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 21s-6-5.7-6-11a6 6 0 0 1 12 0c0 5.3-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>',
+  camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
 };
+
+function compressImage(file, maxSize = 280, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const minSide = Math.min(img.width, img.height);
+        const startX = (img.width - minSide) / 2;
+        const startY = (img.height - minSide) / 2;
+        canvas.width = maxSize;
+        canvas.height = maxSize;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, startX, startY, minSide, minSide, 0, 0, maxSize, maxSize);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => reject(new Error("Couldn't read image"));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error("Couldn't load file"));
+    reader.readAsDataURL(file);
+  });
+}
 
 // ---------- data derivations ----------
 const myP = () => S.profiles[S.me];
@@ -269,12 +294,28 @@ function profileForm(isNew){
       </div>
       <span class="tag" style="background:rgba(66,133,244,.15);color:#4285F4;font-size:11px">Connected</span>
     </div>` : "";
+  const photo = p.photoURL || S.user?.photoURL || "";
+  const photoSection = `
+    <div class="row" style="gap:14px;align-items:center;margin:6px 0 16px">
+      <div class="avatar-wrap">
+        ${av(S.me, p.name || "You", "lg")}
+        <button type="button" class="avatar-badge" data-act="pickphoto" aria-label="Change photo" title="Change photo">${ICON.camera}</button>
+      </div>
+      <div style="flex:1">
+        <label style="margin:0 0 6px">Profile photo</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn ghost sm" data-act="pickphoto">📷 ${photo ? "Change" : "Upload photo"}</button>
+          ${photo ? `<button type="button" class="btn ghost sm" data-act="removephoto" style="color:var(--muted)">Remove</button>` : ""}
+        </div>
+      </div>
+    </div>`;
   return `${isNew?`<div class="hero-logo">${ICON.globe}</div><div class="eyebrow">Roammate</div><h1>Find your next<br><em>favorite person.</em></h1>
   <p class="sub">Meet people who travel like you do, then turn a spark into a shared story.</p>`
   :`<button class="back" data-act="canceledit">${ICON.left} Back</button><div class="eyebrow">Your profile</div><h1>Edit your travel identity</h1>`}
   ${!S.canWrite?`<div class="banner">View-only access<small>Ask the owner for Contributor access to create a profile.</small></div>`:""}
   <form id="pform" class="card">
     ${googleBadge}
+    ${photoSection}
     <label>Your first name</label><input name="name" data-keep="f_name" required maxlength="30" value="${esc(p.name)}" placeholder="e.g. Krishan">
     <div class="row"><div><label>Age</label><input name="age" data-keep="f_age" type="number" min="18" max="99" required value="${esc(p.age)}"></div>
     <div><label>I am</label><select name="gender" data-keep="f_gender">${GENDERS.map(g=>`<option ${p.gender===g?"selected":""}>${g}</option>`).join("")}</select></div></div>
@@ -503,15 +544,51 @@ function groupModal(){
 function profileView(){
   const p=myP(); const t=myTrips().length, g=Object.values(S.joins).filter(j=>j.uid===S.me).length;
   return `<div class="eyebrow">Profile</div><h1>Travel looks<br><em>good on you.</em></h1>
-  <div class="card" style="text-align:center;padding:24px">${av(S.me,p.name,"lg","margin:0 auto 10px;")}
-  <h2 style="margin:0">${esc(p.name)}, ${esc(p.age)}</h2><div class="muted small">${esc(p.city||"")} · ${esc(p.travelStyle||"")}</div>
-  ${p.email?`<div class="small muted" style="margin-top:2px">${esc(p.email)}</div>`:""}
-  <div class="row" style="margin-top:14px;text-align:center"><div><b>${matches().length}</b><div class="small muted">Matches</div></div><div><b>${t}</b><div class="small muted">Trips</div></div><div><b>${g}</b><div class="small muted">Groups</div></div></div></div>
+  <div class="card" style="text-align:center;padding:24px">
+    <div class="avatar-wrap" style="margin:0 auto 10px">
+      ${av(S.me,p.name,"lg")}
+      <button class="avatar-badge" data-act="pickphoto" aria-label="Change photo" title="Change photo">${ICON.camera}</button>
+    </div>
+    <h2 style="margin:0">${esc(p.name)}, ${esc(p.age)}</h2><div class="muted small">${esc(p.city||"")} · ${esc(p.travelStyle||"")}</div>
+    ${p.email?`<div class="small muted" style="margin-top:2px">${esc(p.email)}</div>`:""}
+    <div class="row" style="margin-top:14px;text-align:center"><div><b>${matches().length}</b><div class="small muted">Matches</div></div><div><b>${t}</b><div class="small muted">Trips</div></div><div><b>${g}</b><div class="small muted">Groups</div></div></div>
+  </div>
   <div class="card" style="margin-top:12px"><div class="row"><h3>Your travel identity</h3><button class="btn ghost sm" style="flex:none" data-act="edit">Edit</button></div>
   <p style="margin:8px 0">${esc(p.bio||"Add a line about yourself.")}</p><div class="chips">${(p.interests||[]).map(i=>`<span class="chip static">${esc(i)}</span>`).join("")}</div></div>
   <div class="card" style="margin-top:12px" data-act="edit"><h3>Dating preferences</h3><div class="small muted">Age ${esc(p.ageMin)}–${esc(p.ageMax)} · ${(p.interestedIn||[]).length?esc(p.interestedIn.join(", ")):"Everyone"}</div></div>
-  <button class="btn ghost" style="margin-top:12px" data-act="restart">Show people I passed on again</button>
+  <div class="row" style="margin-top:12px">
+    <button class="btn ghost sm" data-act="pickphoto">📷 Change photo</button>
+    ${p.photoURL?`<button class="btn ghost sm" data-act="removephoto">Remove photo</button>`:""}
+  </div>
+  <button class="btn ghost" style="margin-top:10px" data-act="restart">Show people I passed on again</button>
   <button class="btn forest" style="margin-top:10px" data-act="signout">Sign out</button>`;
+function ensurePhotoInput(){
+  let fi = document.getElementById("photo-input");
+  if(!fi){
+    fi = document.createElement("input");
+    fi.type = "file";
+    fi.id = "photo-input";
+    fi.accept = "image/*";
+    fi.style.display = "none";
+    document.body.appendChild(fi);
+    fi.addEventListener("change", async e => {
+      const file = e.target.files?.[0];
+      if(!file) return;
+      try {
+        toast("Optimizing photo…");
+        const dataUrl = await compressImage(file, 280, 0.82);
+        const cur = myP() || {};
+        await saveProfile({ ...cur, photoURL: dataUrl });
+        toast("Profile photo updated! ✨");
+      } catch(err) {
+        console.error(err);
+        toast("Could not process photo.");
+      } finally {
+        fi.value = "";
+      }
+    });
+  }
+  return fi;
 }
 
 // ---------- events ----------
@@ -520,6 +597,14 @@ document.addEventListener("click",async e=>{
   const a=el.dataset.act, v=el.dataset.v;
   if(a==="tab"){closeSubs();S.view=null;S.editing=false;S.tab=v;render();scrollTo(0,0)}
   else if(a==="chip"){el.classList.toggle("on")}
+  else if(a==="pickphoto"){ensurePhotoInput().click()}
+  else if(a==="removephoto"){
+    if(confirm("Remove your profile photo?")){
+      const cur = myP() || {};
+      await saveProfile({ ...cur, photoURL: "" });
+      toast("Profile photo removed.");
+    }
+  }
   else if(a==="like"||a==="pass"){
     if(!S.canWrite)return toast("View-only access");
     const card=$("#active-card");
