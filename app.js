@@ -23,11 +23,15 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",
 const hash = s => {let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))|0;return Math.abs(h)};
 const color = id => PALETTE[hash(id)%PALETTE.length];
 const initial = n => esc((n||"?").trim()[0]?.toUpperCase()||"?");
-const av = (id,name,cls="") => `<div class="avatar ${cls}" style="background:${color(id)}">${initial(name)}</div>`;
+const av = (id,name,cls="",extra="") => {
+  const photo = S.profiles[id]?.photoURL || (id===S.me ? (myP()?.photoURL || S.user?.photoURL) : "");
+  if(photo) return `<div class="avatar ${cls} has-img" style="background-image:url('${esc(photo)}');${extra}"></div>`;
+  return `<div class="avatar ${cls}" style="background:${color(id)};${extra}">${initial(name)}</div>`;
+};
 const chatId = (a,b) => [a,b].sort().join("+");
 const fmtTime = t => new Date(t).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
 const fmtDate = d => d ? new Date(d+"T00:00").toLocaleDateString([], {day:"numeric",month:"short"}) : "";
-const pname = id => S.profiles[id]?.name || "Traveler";
+const pname = id => S.profiles[id]?.name || (id === S.me ? (S.user?.displayName || "Traveler") : "Traveler");
 function toast(msg){const t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
 const ICON = {
   discover:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>',
@@ -166,13 +170,33 @@ function renderNav(){
 
 // ----- onboarding / profile form -----
 function profileForm(isNew){
-  const p=myP()||{interestedIn:[],interests:[],ageMin:22,ageMax:40};
+  const defaultName = S.user?.displayName || "";
+  const p = myP() || {
+    name: defaultName,
+    photoURL: S.user?.photoURL || "",
+    email: S.user?.email || "",
+    interestedIn: [],
+    interests: [],
+    ageMin: 22,
+    ageMax: 40
+  };
+  if(!p.name && S.user?.displayName) p.name = S.user.displayName;
   const chipset=(name,list,sel)=>`<div class="chips" data-chips="${name}">${list.map(x=>`<span class="chip ${(sel||[]).includes(x)?"on":""}" data-act="chip" data-v="${esc(x)}">${esc(x)}</span>`).join("")}</div>`;
+  const googleBadge = (S.user?.displayName || S.user?.email) ? `
+    <div class="row" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 14px;border-radius:14px;margin-bottom:14px;gap:12px">
+      ${av(S.me, p.name || S.user.displayName, "", "width:42px;height:42px;")}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.user.displayName || p.name || "Traveler")}</div>
+        <div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.user.email||"")}</div>
+      </div>
+      <span class="tag" style="background:rgba(66,133,244,.15);color:#4285F4;font-size:11px">Connected</span>
+    </div>` : "";
   return `${isNew?`<div class="hero-logo">${ICON.globe}</div><div class="eyebrow">Roammate</div><h1>Find your next<br><em>favorite person.</em></h1>
   <p class="sub">Meet people who travel like you do, then turn a spark into a shared story.</p>`
   :`<button class="back" data-act="canceledit">${ICON.left} Back</button><div class="eyebrow">Your profile</div><h1>Edit your travel identity</h1>`}
   ${!S.canWrite?`<div class="banner">View-only access<small>Ask the owner for Contributor access to create a profile.</small></div>`:""}
   <form id="pform" class="card">
+    ${googleBadge}
     <label>Your first name</label><input name="name" data-keep="f_name" required maxlength="30" value="${esc(p.name)}" placeholder="e.g. Krishan">
     <div class="row"><div><label>Age</label><input name="age" data-keep="f_age" type="number" min="18" max="99" required value="${esc(p.age)}"></div>
     <div><label>I am</label><select name="gender" data-keep="f_gender">${GENDERS.map(g=>`<option ${p.gender===g?"selected":""}>${g}</option>`).join("")}</select></div></div>
@@ -198,9 +222,12 @@ function discoverView(){
     <div class="row" style="margin-top:12px"><button class="btn forest sm" data-act="restart">Start over</button><button class="btn ghost sm" data-act="edit">Edit preferences</button></div></div>`;
   } else {
     const {id,p,pct,shared}=c[0];
+    const cardAv = p.photoURL
+      ? `<div class="bigav has-img" style="background-image:url('${esc(p.photoURL)}')"></div>`
+      : `<div class="bigav">${initial(p.name)}</div>`;
     body=`<div class="pcard" style="background:linear-gradient(160deg,${color(id)}cc,${color(id)} 55%,#1d1a18)">
       ${p.demo?'<span class="demo">Demo profile</span>':""}<span class="score">${pct}% match</span>
-      <div class="bigav">${initial(p.name)}</div>
+      ${cardAv}
       <h2>${esc(p.name)}, ${esc(p.age)}</h2>
       <div class="small" style="opacity:.85;display:flex;align-items:center;gap:4px">${ICON.pin}${esc(p.city||"Somewhere")} · ${esc(p.travelStyle||"")}</div>
       ${p.bio?`<p style="margin:10px 0 12px">${esc(p.bio)}</p>`:'<div style="height:10px"></div>'}
@@ -330,7 +357,7 @@ function groupView(id){
   <h2>Group posts</h2>
   ${joined||g.host===S.me?`<form class="stack" data-form="post" data-v="${id}"><textarea data-keep="post_${id}" maxlength="500" placeholder="Share a thought with the group"></textarea><button class="btn forest" type="submit">Post to group</button></form>`
     :`<p class="small muted">Join the group to post.</p>`}
-  <div class="stack" style="margin-top:12px">${posts.slice().reverse().map(p=>`<div class="card" style="padding:12px"><div class="row" style="gap:10px">${av(p.from,pname(p.from)).replace('class="avatar "','class="avatar" style="width:32px;height:32px;font-size:14px;background:'+color(p.from)+'"')}
+  <div class="stack" style="margin-top:12px">${posts.slice().reverse().map(p=>`<div class="card" style="padding:12px"><div class="row" style="gap:10px">${av(p.from,pname(p.from),"","width:32px;height:32px;font-size:14px;")}
     <div style="flex:1"><b>${esc(pname(p.from))}</b> <span class="small muted">· ${new Date(p.at).toLocaleDateString([], {day:"numeric",month:"short"})} ${fmtTime(p.at)}</span></div></div><p style="margin:8px 0 0">${esc(p.text)}</p></div>`).join("")||'<p class="small muted">No posts yet.</p>'}</div>`;
 }
 function groupModal(){
@@ -351,8 +378,9 @@ function groupModal(){
 function profileView(){
   const p=myP(); const t=myTrips().length, g=Object.values(S.joins).filter(j=>j.uid===S.me).length;
   return `<div class="eyebrow">Profile</div><h1>Travel looks<br><em>good on you.</em></h1>
-  <div class="card" style="text-align:center;padding:24px">${av(S.me,p.name,"lg").replace('class="avatar lg"','class="avatar lg" style="margin:0 auto 10px;background:'+color(S.me)+'"')}
+  <div class="card" style="text-align:center;padding:24px">${av(S.me,p.name,"lg","margin:0 auto 10px;")}
   <h2 style="margin:0">${esc(p.name)}, ${esc(p.age)}</h2><div class="muted small">${esc(p.city||"")} · ${esc(p.travelStyle||"")}</div>
+  ${p.email?`<div class="small muted" style="margin-top:2px">${esc(p.email)}</div>`:""}
   <div class="row" style="margin-top:14px;text-align:center"><div><b>${matches().length}</b><div class="small muted">Matches</div></div><div><b>${t}</b><div class="small muted">Trips</div></div><div><b>${g}</b><div class="small muted">Groups</div></div></div></div>
   <div class="card" style="margin-top:12px"><div class="row"><h3>Your travel identity</h3><button class="btn ghost sm" style="flex:none" data-act="edit">Edit</button></div>
   <p style="margin:8px 0">${esc(p.bio||"Add a line about yourself.")}</p><div class="chips">${(p.interests||[]).map(i=>`<span class="chip static">${esc(i)}</span>`).join("")}</div></div>
@@ -402,8 +430,10 @@ document.addEventListener("submit",async e=>{
     const fd=Object.fromEntries(new FormData(f));const pick=n=>[...f.querySelectorAll(`[data-chips="${n}"] .chip.on`)].map(c=>c.dataset.v);
     const lo=Math.max(18,+fd.ageMin||18),hi=Math.max(lo,+fd.ageMax||99);
     if(+fd.age<18) return toast("Roammate is for adults 18+");
+    const photoURL = myP()?.photoURL || S.user?.photoURL || "";
+    const email = myP()?.email || S.user?.email || "";
     await saveProfile({name:fd.name.trim(),age:+fd.age,gender:fd.gender,city:fd.city.trim(),bio:fd.bio.trim(),travelStyle:fd.travelStyle,
-      interests:pick("interests"),interestedIn:pick("interestedIn"),ageMin:lo,ageMax:hi});
+      interests:pick("interests"),interestedIn:pick("interestedIn"),ageMin:lo,ageMax:hi,photoURL,email});
     S.editing=false; render(); return;
   }
   const kind=f.dataset.form, v=f.dataset.v;
@@ -455,10 +485,10 @@ function boot(){
   S.auth=getAuth(app); S.db=makeDb(getFirestore(app),u=>unsubs.push(u)); S.authMode="signup";
   onAuthStateChanged(S.auth,u=>{
     unsubs.forEach(f=>{try{f()}catch{}}); unsubs=[]; closeSubs();
-    Object.assign(S,{me:null,profiles:{},likes:{},chats:{},trips:{},groups:{},joins:{},loaded:false,view:null,tab:"discover",editing:false,seenMatches:null});
+    Object.assign(S,{user:u,me:u?u.uid:null,profiles:{},likes:{},chats:{},trips:{},groups:{},joins:{},loaded:false,view:null,tab:"discover",editing:false,seenMatches:null});
     $("#overlay").innerHTML="";
     if(!u){renderAuth();return}
-    S.me=u.uid; render(); subscribeAll();
+    render(); subscribeAll();
   });
 }
 boot();

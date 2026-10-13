@@ -40,8 +40,9 @@ textarea{resize:vertical;min-height:70px}
 .chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .chip.static{cursor:default}
 .tag{display:inline-block;font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
-.avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:600;flex:none;font-family:Fraunces,serif;font-size:18px}
+.avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:600;flex:none;font-family:Fraunces,serif;font-size:18px;background-size:cover;background-position:center;overflow:hidden}
 .avatar.lg{width:84px;height:84px;font-size:34px}
+.avatar.has-img{color:transparent}
 .banner{background:var(--accent-soft);color:var(--accent);border-radius:14px;padding:12px 14px;font-weight:600;font-size:14px;cursor:pointer}
 .banner small{display:block;font-weight:400;color:var(--muted);font-size:12px}
 /* discover card */
@@ -50,7 +51,8 @@ textarea{resize:vertical;min-height:70px}
 .pcard .demo{position:absolute;top:16px;left:16px;background:rgba(0,0,0,.25);padding:4px 10px;border-radius:999px;font-size:11px}
 .pcard h2{color:#fff;font-size:28px;margin:12px 0 2px}
 .pcard .chip{background:rgba(255,255,255,.16);border-color:transparent;color:#fff}
-.pcard .bigav{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center;font-family:Fraunces,serif;font-size:28px}
+.pcard .bigav{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center;font-family:Fraunces,serif;font-size:28px;background-size:cover;background-position:center;overflow:hidden}
+.pcard .bigav.has-img{color:transparent}
 .actions{display:flex;justify-content:center;gap:18px;margin-top:18px}
 .circle{width:58px;height:58px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;box-shadow:var(--shadow)}
 .circle.like{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);width:66px;height:66px}
