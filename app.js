@@ -28,8 +28,46 @@ const VIBE_IDEAS = {
   "Luxury": ["Rooftop sunset cocktails", "Fine dining dinner", "Spa afternoon", "Scenic harbor boat"],
   "Culture": ["Art gallery visit", "Ancient temple walk", "Folk museum exploration", "Local craft workshop"]
 };
+const DEFAULT_ANNOUNCEMENTS = [
+  {
+    id: "ann-welcome-2",
+    title: "🎉 Welcome to Roammate 2.0!",
+    type: "update",
+    badge: "New Feature",
+    date: "Oct 2026",
+    summary: "Interactive swipe physics, photo upload & travel icebreakers are now live!",
+    content: "We redesigned the matchmaking flow so you can swipe right to like or left to pass with real physics and haptic animations. Upload custom profile photos directly in your profile tab, and break the ice with curated travel prompts.",
+    actionText: "Try Photo Upload",
+    actionAct: "pickphoto"
+  },
+  {
+    id: "ann-offer-roampass",
+    title: "🎁 Maker's Exclusive: 20% Off RoamPass",
+    type: "offer",
+    badge: "Special Offer",
+    date: "Valid through Nov 2026",
+    summary: "Save 20% on verified community hostel stays & group adventure gear.",
+    content: "To support our growing community of solo backpackers and wanderers, use code ROAMFIRST20 on partner booking desks and gear rentals.",
+    code: "ROAMFIRST20",
+    actionText: "Copy Promo Code",
+    actionAct: "copycode"
+  },
+  {
+    id: "ann-meetup-autumn",
+    title: "🌴 Maker's Community Trek: Manali & Bali",
+    type: "event",
+    badge: "Community",
+    date: "Nov 15, 2026",
+    summary: "Official meetups & sunset viewpoints with the Roammate community.",
+    content: "Connect in person with fellow travelers! Head over to Group Trips to see scheduled meetups, share scooter convoys, and find companions for morning hikes.",
+    actionText: "Browse Group Trips",
+    actionAct: "tab",
+    actionTab: "groups"
+  }
+];
 
 const S = {db:null,user:null,me:null,canWrite:true,profiles:{},likes:{},chats:{},trips:{},groups:{},joins:{},
+  announcements:{},annFilter:"all",seenAnnouncements:null,
   tab:"discover",view:null,draft:{},sub:{},seenMatches:null,groupFilter:"foryou",editing:false};
 
 // ---------- helpers ----------
@@ -52,7 +90,7 @@ const ICON = {
   discover:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>',
   matches:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
   trips:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>',
-  groups:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.4"/><path d="M3 19c0-3 2.7-5 6-5s6 2 6 5M15 14.5c3 0 5.5 1.6 5.5 4.5"/></svg>',
+  groups:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.4"/><path d="M3 19c0-3 2.7-5 6-6s6 2 6 5M15 14.5c3 0 5.5 1.6 5.5 4.5"/></svg>',
   profile:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"/></svg>',
   x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   heart:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-5-8-11.2A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8 2.8C20 16 12 21 12 21z"/></svg>',
@@ -61,6 +99,8 @@ const ICON = {
   left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M15 6l-6 6 6 6"/></svg>',
   pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 21s-6-5.7-6-11a6 6 0 0 1 12 0c0 5.3-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>',
   camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
 };
 
 function compressImage(file, maxSize = 280, quality = 0.82) {
@@ -120,6 +160,33 @@ const unread = () => matches().filter(id=>{const c=S.chats[chatId(S.me,id)];retu
 function localGet(k){try{return localStorage.getItem(k)}catch{return null}}
 function localSet(k,v){try{localStorage.setItem(k,v)}catch{}}
 
+function getAnnouncements(){
+  const remote = Object.values(S.announcements||{});
+  if(remote.length) return remote.sort((a,b)=>(b.at||0)-(a.at||0));
+  return DEFAULT_ANNOUNCEMENTS;
+}
+function getSeenAnnouncements(){
+  if(S.seenAnnouncements!==null) return S.seenAnnouncements;
+  try{
+    const stored = JSON.parse(localGet("seen_announcements")||"[]");
+    S.seenAnnouncements = new Set(Array.isArray(stored)?stored:[]);
+  }catch{
+    S.seenAnnouncements = new Set();
+  }
+  return S.seenAnnouncements;
+}
+function unreadAnnouncementsCount(){
+  const seen = getSeenAnnouncements();
+  const list = getAnnouncements();
+  return list.filter(a => !seen.has(a.id)).length;
+}
+function markAnnouncementsSeen(){
+  const seen = getSeenAnnouncements();
+  const list = getAnnouncements();
+  list.forEach(a => seen.add(a.id));
+  localSet("seen_announcements", JSON.stringify([...seen]));
+}
+
 // ---------- writes ----------
 async function safe(fn){
   try{await fn()}catch(e){
@@ -164,7 +231,7 @@ function subscribeAll(){
   const tripSub=(key,q)=>q.onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{if(d.exists)o[d.id]=d.data()});tripSets[key]=o;S.trips={...tripSets.own,...tripSets.inv};render()},e=>console.warn("trips",e));
   tripSub("own",S.db.collection("trips").where("owner","==",S.me));
   tripSub("inv",S.db.collection("trips").where("invited","array-contains",S.me));
-  coll("groups","groups"); coll("joins","joins");
+  coll("groups","groups"); coll("joins","joins"); coll("announcements","announcements");
   S.db.collection("chats").where("members","array-contains",S.me).onSnapshot(snap=>{
     const o={};snap.docs.forEach(d=>{if(d.exists)o[d.id]=d.data()});S.chats=o;render();
   },e=>console.warn("chats",e));
@@ -361,7 +428,17 @@ function discoverView(){
     <button class="circle like" data-act="like" data-v="${id}" aria-label="Like">${ICON.heart}</button></div>
     <div class="small muted" style="text-align:center;margin-top:10px;opacity:.7">Swipe or keyboard ← Pass · Like →</div>`;
   }
-  return `<div class="eyebrow">Discover</div><h1>A little chemistry.<br><em>A lot of possibility.</em></h1>
+  const unreadCount = unreadAnnouncementsCount();
+  return `<div class="top-bar">
+    <div>
+      <div class="eyebrow">Discover</div>
+      <h1>A little chemistry.<br><em>A lot of possibility.</em></h1>
+    </div>
+    <button class="bell-btn" data-act="openannouncements" aria-label="Announcements & Offers" title="Announcements & Offers">
+      ${ICON.bell}
+      ${unreadCount ? '<span class="bell-dot"></span>' : ''}
+    </button>
+  </div>
   <p class="sub">Curated for your travel style and the way you want to connect.</p>
   ${newest?`<div class="banner" data-act="openchat" data-v="${newest}" style="margin-bottom:14px">You and ${esc(pname(newest))} matched!<small>Tap to say hello.</small></div>`:""}
   ${body}`;
@@ -560,8 +637,23 @@ function profileView(){
     <button class="btn ghost sm" data-act="pickphoto">📷 Change photo</button>
     ${p.photoURL?`<button class="btn ghost sm" data-act="removephoto">Remove photo</button>`:""}
   </div>
+  <div class="card announce-link-card" data-act="openannouncements" style="margin-top:12px;cursor:pointer">
+    <div class="row" style="gap:12px">
+      <div class="announce-icon-badge">${ICON.bell}</div>
+      <div style="flex:1">
+        <div style="font-weight:600;display:flex;align-items:center;gap:6px">
+          Announcements & Offers
+          ${unreadAnnouncementsCount() ? `<span class="tag" style="font-size:10px;padding:2px 6px">New</span>` : ""}
+        </div>
+        <div class="small muted">Maker updates, travel discounts & events</div>
+      </div>
+      <div style="flex:none;color:var(--muted);font-weight:600">→</div>
+    </div>
+  </div>
   <button class="btn ghost" style="margin-top:10px" data-act="restart">Show people I passed on again</button>
   <button class="btn forest" style="margin-top:10px" data-act="signout">Sign out</button>`;
+}
+
 function ensurePhotoInput(){
   let fi = document.getElementById("photo-input");
   if(!fi){
@@ -591,13 +683,89 @@ function ensurePhotoInput(){
   return fi;
 }
 
+function announcementsModal(filter = S.annFilter || "all"){
+  S.annFilter = filter;
+  markAnnouncementsSeen();
+  const all = getAnnouncements();
+  const list = filter === "all" ? all : all.filter(a => a.type === filter);
+  $("#overlay").innerHTML = `
+    <div class="modal-bg" data-act="closemodal">
+      <div class="modal announce-modal">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <div class="eyebrow" style="display:flex;align-items:center;gap:5px">${ICON.bell} Maker's Desk</div>
+            <h2 style="margin:2px 0 0;font-size:22px">What's New & Offers</h2>
+          </div>
+          <button class="btn ghost sm" data-act="closemodal" aria-label="Close" style="width:34px;height:34px;padding:0;border-radius:50%;display:grid;place-items:center;flex:none">${ICON.x}</button>
+        </div>
+        <div class="seg" style="margin-bottom:14px">
+          ${[
+            ["all", "All"],
+            ["offer", "🎁 Offers"],
+            ["update", "🚀 Updates"],
+            ["event", "🌴 Community"]
+          ].map(([k, label]) => `<span class="chip ${filter === k ? "on" : ""}" data-act="annfilter" data-v="${k}">${label}</span>`).join("")}
+        </div>
+        <div class="announce-list stack">
+          ${list.length ? list.map(item => `
+            <div class="card announce-card ${esc(item.type||'')}">
+              <div class="row" style="margin-bottom:8px">
+                <span class="tag ${item.type === 'offer' ? 'tag-offer' : ''}">${esc(item.badge || (item.type === 'offer' ? 'Offer' : 'Update'))}</span>
+                <span class="small muted" style="flex:none">${esc(item.date || '')}</span>
+              </div>
+              <h3 style="font-size:16px;line-height:1.3;margin:0 0 6px">${esc(item.title)}</h3>
+              <p style="font-size:13.5px;color:var(--text);margin:0 0 10px;line-height:1.45;opacity:.9">${esc(item.content || item.summary)}</p>
+              ${item.code ? `
+                <div class="promo-box">
+                  <div class="promo-code-wrap">
+                    <span class="promo-label">PROMO CODE</span>
+                    <span class="promo-code">${esc(item.code)}</span>
+                  </div>
+                  <button class="btn primary sm copy-code-btn" data-act="copycode" data-code="${esc(item.code)}">
+                    ${ICON.copy} Copy Code
+                  </button>
+                </div>
+              ` : ''}
+              ${item.actionText && !item.code ? `
+                <button class="btn ghost sm" data-act="${esc(item.actionAct || '')}" ${item.actionTab ? `data-v="${esc(item.actionTab)}"` : ''} style="margin-top:4px;width:auto">
+                  ${esc(item.actionText)} →
+                </button>
+              ` : ''}
+            </div>
+          `).join('') : `
+            <div class="card empty" style="padding:32px 16px">
+              <p class="small muted">No announcements in this category right now.</p>
+            </div>
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+  renderNav();
+}
+
 // ---------- events ----------
 document.addEventListener("click",async e=>{
   const el=e.target.closest("[data-act]"); if(!el) return;
   const a=el.dataset.act, v=el.dataset.v;
-  if(a==="tab"){closeSubs();S.view=null;S.editing=false;S.tab=v;render();scrollTo(0,0)}
+  if(a==="tab"){closeSubs();$("#overlay").innerHTML="";S.view=null;S.editing=false;S.tab=v;render();scrollTo(0,0)}
   else if(a==="chip"){el.classList.toggle("on")}
-  else if(a==="pickphoto"){ensurePhotoInput().click()}
+  else if(a==="pickphoto"){$("#overlay").innerHTML="";ensurePhotoInput().click()}
+  else if(a==="openannouncements"){announcementsModal()}
+  else if(a==="annfilter"){announcementsModal(v)}
+  else if(a==="copycode"){
+    const code = el.dataset.code || v;
+    if(code && navigator.clipboard){
+      try{
+        await navigator.clipboard.writeText(code);
+        toast(`Promo code ${code} copied! 🎉`);
+      }catch{
+        toast(`Promo code: ${code}`);
+      }
+    } else if(code){
+      toast(`Promo code: ${code}`);
+    }
+  }
   else if(a==="removephoto"){
     if(confirm("Remove your profile photo?")){
       const cur = myP() || {};

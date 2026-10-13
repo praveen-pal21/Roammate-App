@@ -60,5 +60,12 @@ service cloud.firestore {
         && jid == request.resource.data.gid + '+' + me();
       allow delete: if signedIn() && resource.data.uid == me();
     }
+
+    // Maker announcements & offers: readable by all signed-in users, read-only for clients.
+    match /announcements/{aid} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
   }
 }
+
