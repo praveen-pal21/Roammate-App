@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+
+    // Dating profiles: any signed-in user can browse; you can only edit your own.
+    match /profiles/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && me() == uid;
+    }
+
+    // Likes/passes: readable so mutual likes can be detected; you only write your own.
+    match /likes/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && me() == uid;
+    }
+
+    // 1:1 chats: only the two members can read or write. Chat id = "<uidA>+<uidB>" (sorted).
+    match /chats/{cid} {
+      allow read: if signedIn() && me() in resource.data.members;
+      allow create, update: if signedIn()
+        && me() in request.resource.data.members
+        && request.resource.data.members.size() == 2
+        && cid == request.resource.data.members[0] + '+' + request.resource.data.members[1];
+
+      match /msgs/{msgId} {
+        allow read: if signedIn() && me() in get(/databases/$(database)/documents/chats/$(cid)).data.members;
+        allow create: if signedIn() && request.resource.data.from == me()
+          && me() in get(/databases/$(database)/documents/chats/$(cid)).data.members;
+      }
+    }
+
+    // Personal trips: visible to the owner and invited matches; both can add activities.
+    match /trips/{tripId} {
+      allow read: if signedIn() && (me() == resource.data.owner || me() in resource.data.invited);
+      allow create: if signedIn() && request.resource.data.owner == me();
+      allow update: if signedIn() && (me() == resource.data.owner || me() in resource.data.invited)
+        && request.resource.data.owner == resource.data.owner;
+      allow delete: if signedIn() && me() == resource.data.owner;
+    }
+
+    // Group trips: everyone can browse; only the host edits or deletes.
+    match /groups/{gid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.host == me();
+      allow update, delete: if signedIn() && resource.data.host == me();
+
+      match /posts/{postId} {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.resource.data.from == me();
+        allow delete: if signedIn() && resource.data.from == me();
+      }
+    }
+
+    // Group membership: one doc per (group, person), id = "<gid>+<uid>".
+    match /joins/{jid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == me()
+        && jid == request.resource.data.gid + '+' + me();
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+  }
+}
