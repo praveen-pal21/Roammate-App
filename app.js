@@ -67,7 +67,7 @@ const DEFAULT_ANNOUNCEMENTS = [
 ];
 
 const S = {db:null,user:null,me:null,canWrite:true,profiles:{},likes:{},chats:{},trips:{},groups:{},joins:{},
-  announcements:{},annFilter:"all",seenAnnouncements:null,
+  announcements:{},annFilter:"all",seenAnnouncements:null,cardPhotoIdx:{},
   tab:"discover",view:null,draft:{},sub:{},seenMatches:null,groupFilter:"foryou",editing:false};
 
 // ---------- helpers ----------
@@ -76,8 +76,10 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",
 const hash = s => {let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))|0;return Math.abs(h)};
 const color = id => PALETTE[hash(id)%PALETTE.length];
 const initial = n => esc((n||"?").trim()[0]?.toUpperCase()||"?");
+const userPhotos = p => (p?.photos && Array.isArray(p.photos) && p.photos.length) ? p.photos : (p?.photoURL ? [p.photoURL] : []);
 const av = (id,name,cls="",extra="") => {
-  const photo = S.profiles[id]?.photoURL || (id===S.me ? (myP()?.photoURL || S.user?.photoURL) : "");
+  const p = S.profiles[id] || (id===S.me ? myP() : null);
+  const photo = p?.photoURL || (p?.photos && p.photos[0]) || (id===S.me ? (myP()?.photoURL || S.user?.photoURL) : "");
   if(photo) return `<div class="avatar ${cls} has-img" style="background-image:url('${esc(photo)}');${extra}"></div>`;
   return `<div class="avatar ${cls}" style="background:${color(id)};${extra}">${initial(name)}</div>`;
 };
@@ -92,18 +94,20 @@ const ICON = {
   trips:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>',
   groups:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.4"/><path d="M3 19c0-3 2.7-5 6-6s6 2 6 5M15 14.5c3 0 5.5 1.6 5.5 4.5"/></svg>',
   profile:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"/></svg>',
-  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  x:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   heart:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-5-8-11.2A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8 2.8C20 16 12 21 12 21z"/></svg>',
   globe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>',
   send:'<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M3 20.5 21 12 3 3.5l2.5 8.5zM5.5 12H13"/></svg>',
   left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M15 6l-6 6 6 6"/></svg>',
   pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M12 21s-6-5.7-6-11a6 6 0 0 1 12 0c0 5.3-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>',
   camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
-  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
-  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  calendar:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
 };
 
-function compressImage(file, maxSize = 280, quality = 0.82) {
+function compressImage(file, maxSize = 360, quality = 0.82) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -125,6 +129,17 @@ function compressImage(file, maxSize = 280, quality = 0.82) {
     reader.onerror = () => reject(new Error("Couldn't load file"));
     reader.readAsDataURL(file);
   });
+}
+async function compressImages(files, maxSize = 360, quality = 0.82) {
+  const out = [];
+  for (const f of Array.from(files || [])) {
+    try {
+      out.push(await compressImage(f, maxSize, quality));
+    } catch (err) {
+      console.warn("Failed to compress file", f.name, err);
+    }
+  }
+  return out;
 }
 
 // ---------- data derivations ----------
@@ -361,19 +376,39 @@ function profileForm(isNew){
       </div>
       <span class="tag" style="background:rgba(66,133,244,.15);color:#4285F4;font-size:11px">Connected</span>
     </div>` : "";
-  const photo = p.photoURL || S.user?.photoURL || "";
-  const photoSection = `
-    <div class="row" style="gap:14px;align-items:center;margin:6px 0 16px">
-      <div class="avatar-wrap">
-        ${av(S.me, p.name || "You", "lg")}
-        <button type="button" class="avatar-badge" data-act="pickphoto" aria-label="Change photo" title="Change photo">${ICON.camera}</button>
-      </div>
-      <div style="flex:1">
-        <label style="margin:0 0 6px">Profile photo</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn ghost sm" data-act="pickphoto">📷 ${photo ? "Change" : "Upload photo"}</button>
-          ${photo ? `<button type="button" class="btn ghost sm" data-act="removephoto" style="color:var(--muted)">Remove</button>` : ""}
+  const photos = userPhotos(p);
+  const photoSlots = Array.from({length: 6}).map((_, i) => {
+    const url = photos[i];
+    if(url) {
+      return `
+        <div class="photo-slot filled ${i === 0 ? 'primary-slot' : ''}" style="background-image:url('${esc(url)}')" data-act="viewphoto" data-url="${esc(url)}" data-title="Photo ${i + 1}">
+          ${i === 0 ? `<span class="photo-slot-badge">Main</span>` : `<button type="button" class="photo-slot-badge" style="cursor:pointer;border:0" data-act="makemainphoto" data-idx="${i}" title="Set as main avatar">Set Main</button>`}
+          <button type="button" class="photo-slot-del" data-act="deletephoto" data-idx="${i}" title="Remove photo" aria-label="Remove photo">✕</button>
         </div>
+      `;
+    } else {
+      return `
+        <div class="photo-slot" data-act="addphotos" title="Add photo">
+          <div class="photo-slot-add">
+            ${ICON.plus}
+            <span>${i === 0 ? 'Main' : '+ Add'}</span>
+          </div>
+        </div>
+      `;
+    }
+  }).join("");
+
+  const photoSection = `
+    <div style="margin:4px 0 16px">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+        <label style="margin:0">Travel Photos <span class="muted small">(${photos.length}/6)</span></label>
+        <button type="button" class="btn ghost sm" data-act="addphotos" style="width:auto;padding:5px 12px;font-size:12.5px">
+          📷 + Upload Photos
+        </button>
+      </div>
+      <div class="small muted" style="margin-bottom:8px">First photo is your main portrait. Tap slots to add up to 6 travel moments.</div>
+      <div class="photo-grid">
+        ${photoSlots}
       </div>
     </div>`;
   return `${isNew?`<div class="hero-logo">${ICON.globe}</div><div class="eyebrow">Roammate</div><h1>Find your next<br><em>favorite person.</em></h1>
@@ -408,14 +443,28 @@ function discoverView(){
     <div class="row" style="margin-top:12px"><button class="btn forest sm" data-act="restart">Start over</button><button class="btn ghost sm" data-act="edit">Edit preferences</button></div></div>`;
   } else {
     const {id,p,pct,shared}=c[0];
-    const cardAv = p.photoURL
-      ? `<div class="bigav has-img" style="background-image:url('${esc(p.photoURL)}')"></div>`
+    const photos = userPhotos(p);
+    const curIdx = S.cardPhotoIdx[id] || 0;
+    const activePhoto = photos[curIdx] || photos[0] || p.photoURL || "";
+    const cardAv = activePhoto
+      ? `<div class="bigav has-img" style="background-image:url('${esc(activePhoto)}');cursor:pointer" data-act="viewphoto" data-url="${esc(activePhoto)}" data-title="${esc(p.name)}" data-caption="${esc(p.city||'')}"></div>`
       : `<div class="bigav">${initial(p.name)}</div>`;
+    const storyBarsHtml = photos.length > 1 ? `
+      <div class="story-bars">
+        ${photos.map((_, i) => `<div class="story-bar ${i === curIdx ? 'active' : ''}"></div>`).join("")}
+      </div>
+      <div class="photo-counter" data-act="viewphoto" data-url="${esc(activePhoto)}" data-title="${esc(p.name)}" data-caption="${esc(p.city||'')}">
+        ${curIdx + 1}/${photos.length} 📷
+      </div>
+      <div class="card-tap-prev" data-act="prevphoto" data-v="${id}"></div>
+      <div class="card-tap-next" data-act="nextphoto" data-v="${id}"></div>
+    ` : "";
     body=`<div class="pcard-wrap">
       <div class="pcard swiping" id="active-card" data-cid="${id}" style="background:linear-gradient(160deg,${color(id)}cc,${color(id)} 55%,#1d1a18)">
         <div class="stamp like" id="stamp-like">LIKE</div>
         <div class="stamp nope" id="stamp-nope">NOPE</div>
-        ${p.demo?'<span class="demo">Demo profile</span>':""}<span class="score">${pct}% match</span>
+        ${storyBarsHtml}
+        ${p.demo?`<span class="demo" style="${photos.length>1?'top:22px':''}">Demo profile</span>`:""}<span class="score" style="${photos.length>1?'top:22px':''}">${pct}% match</span>
         ${cardAv}
         <h2>${esc(p.name)}, ${esc(p.age)}</h2>
         <div class="small" style="opacity:.85;display:flex;align-items:center;gap:4px">${ICON.pin}${esc(p.city||"Somewhere")} · ${esc(p.travelStyle||"")}</div>
@@ -426,7 +475,7 @@ function discoverView(){
     </div>
     <div class="actions"><button class="circle" data-act="pass" data-v="${id}" aria-label="Pass">${ICON.x}</button>
     <button class="circle like" data-act="like" data-v="${id}" aria-label="Like">${ICON.heart}</button></div>
-    <div class="small muted" style="text-align:center;margin-top:10px;opacity:.7">Swipe or keyboard ← Pass · Like →</div>`;
+    <div class="small muted" style="text-align:center;margin-top:10px;opacity:.7">${photos.length>1?'Tap sides to browse photos · ':''}Swipe or ← Pass · Like →</div>`;
   }
   const unreadCount = unreadAnnouncementsCount();
   return `<div class="top-bar">
@@ -549,8 +598,15 @@ function tripView(id){
 function tripModal(withId){
   const today=new Date().toISOString().slice(0,10);
   const later=new Date(Date.now()+4*864e5).toISOString().slice(0,10);
-  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal">
-  <div class="eyebrow">New trip</div><h1 style="font-size:24px">Where to?</h1>
+  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal" onclick="event.stopPropagation()">
+  <div class="modal-handle"></div>
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div>
+      <div class="eyebrow" style="display:flex;align-items:center;gap:5px">${ICON.trips} New trip</div>
+      <h2 style="margin:2px 0 0;font-size:22px">Where to?</h2>
+    </div>
+    <button class="modal-close" data-act="closemodal">${ICON.x}</button>
+  </div>
   <form data-form="trip" data-v="${withId||""}">
   <label>Trip name</label><input name="title" required maxlength="50" placeholder="Monsoon in Goa">
   <label>Destination</label><input name="destination" required maxlength="50" placeholder="Goa, India">
@@ -561,14 +617,107 @@ function tripModal(withId){
   <div style="margin-top:16px"><button class="btn primary" type="submit">Create trip</button></div></form></div></div>`;
 }
 
+const SAMPLE_EVENTS = [
+  {
+    id: "sample-event-manali",
+    title: "Sunrise Viewpoint Trek & Chai Social",
+    place: "Old Manali, Himachal",
+    date: "2026-11-15",
+    time: "06:00 AM",
+    vibe: "Adventure",
+    capacity: 14,
+    description: "Catching first morning rays above the valley, followed by steaming chai and mountain stories.",
+    host: "Roammate Community",
+    isEvent: true,
+    sample: true
+  },
+  {
+    id: "sample-event-bali",
+    title: "Canggu Sunset Social & Cliffside Drinks",
+    place: "Echo Beach, Bali",
+    date: "2026-11-20",
+    time: "05:30 PM",
+    vibe: "Foodie",
+    capacity: 20,
+    description: "Relaxed oceanfront gathering for solo wanderers and digital nomads. Good music, coconut drinks, and travel tips.",
+    host: "Roammate Community",
+    isEvent: true,
+    sample: true
+  },
+  {
+    id: "sample-event-goa",
+    title: "Arambol Drum Circle & Beach Bonfire",
+    place: "Arambol Beach, Goa",
+    date: "2026-12-05",
+    time: "07:00 PM",
+    vibe: "Culture",
+    capacity: 25,
+    description: "Sunset acoustics, bonfire acoustic jams, and meeting fellow travelers along the coast.",
+    host: "Roammate Community",
+    isEvent: true,
+    sample: true
+  }
+];
+
+function renderEventCard(id, g){
+  const mem = groupMembers(id);
+  const isGoing = mem.includes(S.me);
+  const d = g.date ? new Date(g.date + "T00:00") : (g.start ? new Date(g.start + "T00:00") : new Date());
+  const month = d.toLocaleDateString([], { month: "short" }).toUpperCase();
+  const day = d.getDate();
+  const cap = +g.capacity || 20;
+  const previewAvs = mem.slice(0, 3).map(u => av(u, pname(u))).join("");
+  return `
+    <div class="event-card" data-act="opengroup" data-v="${id}">
+      <div class="event-header">
+        <div class="event-date-box">
+          <div class="event-month">${esc(month)}</div>
+          <div class="event-day">${day}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <span class="tag" style="margin-bottom:4px">${esc(g.vibe || "Meetup")}</span>
+          <h3 class="event-title">${esc(g.title)}</h3>
+          <div class="event-meta">
+            <span>${ICON.pin} ${esc(g.place)}</span>
+            <span>${ICON.calendar} ${esc(g.time || 'Evening')}</span>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 12px;line-height:1.4">${esc(g.description || '')}</p>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div class="small muted" style="display:flex;align-items:center;gap:6px">
+          ${mem.length ? `<div class="av-stack">${previewAvs}</div>` : ''}
+          <span>${mem.length}/${cap} travelers</span>
+        </div>
+        <button class="rsvp-btn ${isGoing ? 'going' : 'not-going'}" data-act="${isGoing ? 'leave' : 'join'}" data-v="${id}" onclick="event.stopPropagation()">
+          ${isGoing ? '✓ Going' : '+ RSVP'}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 // ----- groups -----
 function groupsView(){
-  const me=myP()||{}; let list=Object.entries(S.groups).sort((a,b)=>(a[1].start||"").localeCompare(b[1].start||""));
-  if(S.groupFilter==="foryou") list=list.filter(([,g])=>(g.tags||[]).some(t=>(me.interests||[]).includes(t)||t===me.travelStyle)).concat(list.filter(([,g])=>!(g.tags||[]).some(t=>(me.interests||[]).includes(t)||t===me.travelStyle)));
-  if(S.groupFilter==="mine") list=list.filter(([id,g])=>groupMembers(id).includes(S.me)||g.host===S.me);
-  return `<div class="eyebrow">Group travel</div><h1>Go together.<br><em>Make it bigger.</em></h1><p class="sub">Find small groups of curious people heading somewhere beautiful.</p>
-  <div class="seg">${[["foryou","For you"],["mine","Joined"]].map(([k,l])=>`<span class="chip ${S.groupFilter===k?"on":""}" data-act="gfilter" data-v="${k}">${l}</span>`).join("")}</div>
-  ${list.length?`<div class="grid2">${list.map(([id,g])=>{
+  const me=myP()||{};
+  const allGroups = { ...S.groups };
+  SAMPLE_EVENTS.forEach(ev => { if(!allGroups[ev.id]) allGroups[ev.id] = ev; });
+  let list = Object.entries(allGroups).sort((a,b)=>(a[1].date||a[1].start||"").localeCompare(b[1].date||b[1].start||""));
+  
+  const isEventsTab = S.groupFilter === "events";
+  if(isEventsTab) {
+    list = list.filter(([,g]) => g.isEvent || g.type === "event" || (g.tags||[]).includes("Event") || (g.tags||[]).includes("Meetup"));
+  } else if(S.groupFilter === "mine") {
+    list = list.filter(([id,g]) => groupMembers(id).includes(S.me) || g.host === S.me);
+  } else {
+    list = list.filter(([,g]) => !g.isEvent && g.type !== "event");
+    list = list.filter(([,g])=>(g.tags||[]).some(t=>(me.interests||[]).includes(t)||t===me.travelStyle)).concat(list.filter(([,g])=>!(g.tags||[]).some(t=>(me.interests||[]).includes(t)||t===me.travelStyle)));
+  }
+
+  return `<div class="eyebrow">Group travel &amp; events</div><h1>${isEventsTab ? 'Meet up.<br><em>Share the vibe.</em>' : 'Go together.<br><em>Make it bigger.</em>'}</h1>
+  <p class="sub">${isEventsTab ? 'Community meetups, sunrise treks, and sunset socials happening nearby.' : 'Find small groups of curious people heading somewhere beautiful.'}</p>
+  <div class="seg">${[["foryou","Expeditions"],["events","🌴 Meetups & Events"],["mine","Joined"]].map(([k,l])=>`<span class="chip ${S.groupFilter===k?"on":""}" data-act="gfilter" data-v="${k}">${l}</span>`).join("")}</div>
+  ${list.length ? (isEventsTab ? `<div class="stack">${list.map(([id,g])=>renderEventCard(id,g)).join("")}</div>` : `<div class="grid2">${list.map(([id,g])=>{
     const mem=groupMembers(id);
     const cap=+g.capacity||10;
     const pct=Math.min(Math.round((mem.length/cap)*100),100);
@@ -581,17 +730,20 @@ function groupsView(){
     <div class="cap-meter"><div class="cap-fill ${isWarn?'warn':''}" style="width:${pct}%"></div></div>
     <div class="small muted">${mem.length}/${cap} travelers · ${spotsLeft>0?spotsLeft+' left':'Full'}</div>
     ${mem.length?`<div class="av-stack">${previewAvs}</div>`:""}
-    ${g.sample?'<span class="tag" style="margin-top:6px">Sample</span>':""}</div>`}).join("")}</div>`
-  :`<div class="card empty">${ICON.groups}<h3>${S.groupFilter==="mine"?"You haven't joined a group yet":"No group trips yet"}</h3></div>`}
-  <div style="margin-top:16px"><button class="btn primary" data-act="newgroup">+ Host a group trip</button></div>`;
+    ${g.sample?'<span class="tag" style="margin-top:6px">Sample</span>':""}</div>`}).join("")}</div>`)
+  : `<div class="card empty">${ICON.groups}<h3>${S.groupFilter==="mine"?"You haven't joined anything yet":isEventsTab?"No meetups scheduled yet":"No group expeditions yet"}</h3></div>`}
+  <div style="margin-top:16px">${isEventsTab ? `<button class="btn forest" data-act="newevent">+ Host a meetup / event</button>` : `<button class="btn primary" data-act="newgroup">+ Host a group expedition</button>`}</div>`;
 }
+
 function groupView(id){
-  const g=S.groups[id]; if(!g) return `<button class="back" data-act="back">${ICON.left} All group trips</button><div class="empty">This group was removed.</div>`;
+  const allGroups = { ...S.groups };
+  SAMPLE_EVENTS.forEach(ev => { if(!allGroups[ev.id]) allGroups[ev.id] = ev; });
+  const g=allGroups[id]; if(!g) return `<button class="back" data-act="back">${ICON.left} All group trips</button><div class="empty">This group was removed.</div>`;
   const mem=groupMembers(id); const joined=mem.includes(S.me); const full=mem.length>=(+g.capacity||10);
   const posts=S.sub.key==="g"+id?S.sub.items:[];
   return `<button class="back" data-act="back">${ICON.left} All group trips</button>
-  <div class="tripcard" style="cursor:default"><h2 style="color:#fff;margin:0 0 2px">${esc(g.title)}</h2><div class="m">${esc(g.place)} · ${fmtDate(g.start)} – ${fmtDate(g.end)}</div>
-  <p style="margin:10px 0 6px">${esc(g.description||"")}</p><div class="m">${mem.length}/${esc(g.capacity||10)} travelers · Hosted by ${g.host?(g.host===S.me?"you":esc(pname(g.host))):"Roammate"}</div></div>
+  <div class="tripcard" style="cursor:default"><h2 style="color:#fff;margin:0 0 2px">${esc(g.title)}</h2><div class="m">${esc(g.place)} · ${g.time ? esc(g.time)+' · ' : ''}${fmtDate(g.date||g.start)}${g.end&&g.end!==g.start?' – '+fmtDate(g.end):''}</div>
+  <p style="margin:10px 0 6px">${esc(g.description||"")}</p><div class="m">${mem.length}/${esc(g.capacity||10)} travelers · Hosted by ${g.host?(g.host===S.me?"you":esc(pname(g.host))):"Roammate Community"}</div></div>
   <div style="margin-top:12px">${joined?`<button class="btn ghost" data-act="leave" data-v="${id}">Leave group</button>`
     :`<button class="btn primary" data-act="join" data-v="${id}" ${full?"disabled":""}>${full?"Group is full":"Join this group trip"}</button>`}</div>
   ${(g.tags||[]).length?`<div class="chips" style="margin-top:12px">${g.tags.map(t=>`<span class="chip static">${esc(t)}</span>`).join("")}</div>`:""}
@@ -603,10 +755,18 @@ function groupView(id){
   <div class="stack" style="margin-top:12px">${posts.slice().reverse().map(p=>`<div class="card" style="padding:12px"><div class="row" style="gap:10px">${av(p.from,pname(p.from),"","width:32px;height:32px;font-size:14px;")}
     <div style="flex:1"><b>${esc(pname(p.from))}</b> <span class="small muted">· ${new Date(p.at).toLocaleDateString([], {day:"numeric",month:"short"})} ${fmtTime(p.at)}</span></div></div><p style="margin:8px 0 0">${esc(p.text)}</p></div>`).join("")||'<p class="small muted">No posts yet.</p>'}</div>`;
 }
+
 function groupModal(){
   const today=new Date(Date.now()+14*864e5).toISOString().slice(0,10),later=new Date(Date.now()+19*864e5).toISOString().slice(0,10);
-  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal">
-  <div class="eyebrow">Host a group trip</div><h1 style="font-size:24px">Gather your crew</h1>
+  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal" onclick="event.stopPropagation()">
+  <div class="modal-handle"></div>
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div>
+      <div class="eyebrow" style="display:flex;align-items:center;gap:5px">${ICON.groups} Host an expedition</div>
+      <h2 style="margin:2px 0 0;font-size:22px">Gather your crew</h2>
+    </div>
+    <button class="modal-close" data-act="closemodal">${ICON.x}</button>
+  </div>
   <form data-form="group">
   <label>Trip name</label><input name="title" required maxlength="40" placeholder="Spiti road trip">
   <label>Where</label><input name="place" required maxlength="40" placeholder="Spiti Valley, India">
@@ -614,12 +774,50 @@ function groupModal(){
   <label>Group size</label><input type="number" name="capacity" min="2" max="40" value="8">
   <label>What's the plan?</label><textarea name="description" maxlength="240" placeholder="Hikes, mountain huts and slow mornings."></textarea>
   <label>Tags</label><div class="chips" data-chips="gtags">${[...STYLES,...INTERESTS.slice(0,8)].map(x=>`<span class="chip" data-act="chip" data-v="${x}">${x}</span>`).join("")}</div>
-  <div style="margin-top:16px"><button class="btn primary" type="submit">Publish group trip</button></div></form></div></div>`;
+  <div style="margin-top:16px"><button class="btn primary" type="submit">Publish group expedition</button></div></form></div></div>`;
+}
+
+function eventModal(){
+  const today=new Date(Date.now()+7*864e5).toISOString().slice(0,10);
+  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal" onclick="event.stopPropagation()">
+  <div class="modal-handle"></div>
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div>
+      <div class="eyebrow" style="display:flex;align-items:center;gap:5px">${ICON.calendar} Host a Meetup</div>
+      <h2 style="margin:2px 0 0;font-size:22px">Gather the Community</h2>
+    </div>
+    <button class="modal-close" data-act="closemodal">${ICON.x}</button>
+  </div>
+  <form data-form="event">
+  <label>Event / Meetup title</label><input name="title" required maxlength="50" placeholder="Sunset Bonfire & Acoustics">
+  <label>Venue / Location</label><input name="place" required maxlength="50" placeholder="Echo Beach, Bali">
+  <div class="row"><div><label>Date</label><input type="date" name="date" required value="${today}"></div><div><label>Time</label><input type="text" name="time" required value="05:30 PM" placeholder="05:30 PM"></div></div>
+  <label>Vibe</label><select name="vibe">${STYLES.map(s=>`<option>${s}</option>`).join("")}</select>
+  <label>Max Attendees</label><input type="number" name="capacity" min="3" max="50" value="16">
+  <label>What's the plan & meeting spot?</label><textarea name="description" maxlength="260" placeholder="Where we meet, what to bring, and how we'll spend the time."></textarea>
+  <div style="margin-top:16px"><button class="btn forest" type="submit">Publish Meetup</button></div></form></div></div>`;
 }
 
 // ----- profile -----
 function profileView(){
   const p=myP(); const t=myTrips().length, g=Object.values(S.joins).filter(j=>j.uid===S.me).length;
+  const photos = userPhotos(p);
+  const photoStrip = photos.length ? `
+    <div class="card" style="margin-top:12px">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="margin:0">Travel Gallery <span class="muted small">(${photos.length}/6)</span></h3>
+        <button class="btn ghost sm" data-act="addphotos" style="width:auto;padding:4px 10px;font-size:12px">📷 + Add</button>
+      </div>
+      <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">
+        ${photos.map((u, i) => `
+          <div style="position:relative;flex:none;width:76px;height:76px;border-radius:12px;overflow:hidden;background-image:url('${esc(u)}');background-size:cover;background-position:center;cursor:pointer" data-act="viewphoto" data-url="${esc(u)}" data-title="Photo ${i+1}">
+            ${i === 0 ? '<span class="photo-slot-badge" style="font-size:9px;padding:1px 5px">Main</span>' : ''}
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  ` : "";
+
   return `<div class="eyebrow">Profile</div><h1>Travel looks<br><em>good on you.</em></h1>
   <div class="card" style="text-align:center;padding:24px">
     <div class="avatar-wrap" style="margin:0 auto 10px">
@@ -630,13 +828,10 @@ function profileView(){
     ${p.email?`<div class="small muted" style="margin-top:2px">${esc(p.email)}</div>`:""}
     <div class="row" style="margin-top:14px;text-align:center"><div><b>${matches().length}</b><div class="small muted">Matches</div></div><div><b>${t}</b><div class="small muted">Trips</div></div><div><b>${g}</b><div class="small muted">Groups</div></div></div>
   </div>
+  ${photoStrip}
   <div class="card" style="margin-top:12px"><div class="row"><h3>Your travel identity</h3><button class="btn ghost sm" style="flex:none" data-act="edit">Edit</button></div>
   <p style="margin:8px 0">${esc(p.bio||"Add a line about yourself.")}</p><div class="chips">${(p.interests||[]).map(i=>`<span class="chip static">${esc(i)}</span>`).join("")}</div></div>
   <div class="card" style="margin-top:12px" data-act="edit"><h3>Dating preferences</h3><div class="small muted">Age ${esc(p.ageMin)}–${esc(p.ageMax)} · ${(p.interestedIn||[]).length?esc(p.interestedIn.join(", ")):"Everyone"}</div></div>
-  <div class="row" style="margin-top:12px">
-    <button class="btn ghost sm" data-act="pickphoto">📷 Change photo</button>
-    ${p.photoURL?`<button class="btn ghost sm" data-act="removephoto">Remove photo</button>`:""}
-  </div>
   <div class="card announce-link-card" data-act="openannouncements" style="margin-top:12px;cursor:pointer">
     <div class="row" style="gap:12px">
       <div class="announce-icon-badge">${ICON.bell}</div>
@@ -654,7 +849,7 @@ function profileView(){
   <button class="btn forest" style="margin-top:10px" data-act="signout">Sign out</button>`;
 }
 
-function ensurePhotoInput(){
+function ensurePhotoInput(allowMultiple = true){
   let fi = document.getElementById("photo-input");
   if(!fi){
     fi = document.createElement("input");
@@ -664,23 +859,41 @@ function ensurePhotoInput(){
     fi.style.display = "none";
     document.body.appendChild(fi);
     fi.addEventListener("change", async e => {
-      const file = e.target.files?.[0];
-      if(!file) return;
+      const files = Array.from(e.target.files || []);
+      if(!files.length) return;
       try {
-        toast("Optimizing photo…");
-        const dataUrl = await compressImage(file, 280, 0.82);
+        toast(`Optimizing ${files.length > 1 ? files.length + ' photos' : 'photo'}…`);
+        const compressedList = await compressImages(files, 360, 0.82);
         const cur = myP() || {};
-        await saveProfile({ ...cur, photoURL: dataUrl });
-        toast("Profile photo updated! ✨");
+        const existing = userPhotos(cur);
+        const combined = [...existing, ...compressedList].slice(0, 6);
+        const mainPhoto = combined[0] || cur.photoURL || "";
+        await saveProfile({ ...cur, photos: combined, photoURL: mainPhoto });
+        toast(files.length > 1 ? `${compressedList.length} photos added! ✨` : "Photo updated! ✨");
       } catch(err) {
         console.error(err);
-        toast("Could not process photo.");
+        toast("Could not process photo(s).");
       } finally {
         fi.value = "";
       }
     });
   }
+  if(allowMultiple) fi.setAttribute("multiple", "");
+  else fi.removeAttribute("multiple");
   return fi;
+}
+
+function lightboxModal(url, title = "", caption = ""){
+  if(!url) return;
+  $("#overlay").innerHTML = `
+    <div class="lightbox-bg" data-act="closelightbox">
+      <button class="lightbox-close" data-act="closelightbox" aria-label="Close">${ICON.x}</button>
+      <div class="lightbox-card" onclick="event.stopPropagation()">
+        <img class="lightbox-img" src="${esc(url)}" alt="${esc(title||'Travel photo')}">
+        ${(title || caption) ? `<div class="lightbox-caption">${title ? `<b>${esc(title)}</b>` : ""}${caption ? ` · ${esc(caption)}` : ""}</div>` : ""}
+      </div>
+    </div>
+  `;
 }
 
 function announcementsModal(filter = S.annFilter || "all"){
@@ -690,13 +903,14 @@ function announcementsModal(filter = S.annFilter || "all"){
   const list = filter === "all" ? all : all.filter(a => a.type === filter);
   $("#overlay").innerHTML = `
     <div class="modal-bg" data-act="closemodal">
-      <div class="modal announce-modal">
+      <div class="modal announce-modal" onclick="event.stopPropagation()">
+        <div class="modal-handle"></div>
         <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
           <div>
-            <div class="eyebrow" style="display:flex;align-items:center;gap:5px">${ICON.bell} Maker's Desk</div>
-            <h2 style="margin:2px 0 0;font-size:22px">What's New & Offers</h2>
+            <div class="eyebrow" style="display:flex;align-items:center;gap:6px">${ICON.bell} Maker's Desk</div>
+            <h2 style="margin:2px 0 0;font-size:22px">What's New &amp; Offers</h2>
           </div>
-          <button class="btn ghost sm" data-act="closemodal" aria-label="Close" style="width:34px;height:34px;padding:0;border-radius:50%;display:grid;place-items:center;flex:none">${ICON.x}</button>
+          <button class="modal-close" data-act="closemodal" aria-label="Close">${ICON.x}</button>
         </div>
         <div class="seg" style="margin-bottom:14px">
           ${[
@@ -750,7 +964,58 @@ document.addEventListener("click",async e=>{
   const a=el.dataset.act, v=el.dataset.v;
   if(a==="tab"){closeSubs();$("#overlay").innerHTML="";S.view=null;S.editing=false;S.tab=v;render();scrollTo(0,0)}
   else if(a==="chip"){el.classList.toggle("on")}
-  else if(a==="pickphoto"){$("#overlay").innerHTML="";ensurePhotoInput().click()}
+  else if(a==="addphotos"||a==="pickphoto"){$("#overlay").innerHTML="";ensurePhotoInput(true).click()}
+  else if(a==="deletephoto"){
+    const idx = +el.dataset.idx;
+    const cur = myP() || {};
+    const photos = [...userPhotos(cur)];
+    if(photos[idx] !== undefined){
+      photos.splice(idx, 1);
+      await saveProfile({ ...cur, photos, photoURL: photos[0] || "" });
+      toast("Photo removed.");
+      render();
+    }
+  }
+  else if(a==="makemainphoto"){
+    const idx = +el.dataset.idx;
+    const cur = myP() || {};
+    const photos = [...userPhotos(cur)];
+    if(photos[idx] && idx > 0){
+      const [moved] = photos.splice(idx, 1);
+      photos.unshift(moved);
+      await saveProfile({ ...cur, photos, photoURL: photos[0] });
+      toast("Set as main avatar! ✨");
+      render();
+    }
+  }
+  else if(a==="viewphoto"){
+    lightboxModal(el.dataset.url, el.dataset.title, el.dataset.caption);
+  }
+  else if(a==="closelightbox"){
+    $("#overlay").innerHTML = "";
+  }
+  else if(a==="nextphoto"){
+    e.stopPropagation();
+    const cid = el.dataset.v;
+    const p = S.profiles[cid];
+    const photos = userPhotos(p);
+    if(photos.length > 1){
+      const cur = S.cardPhotoIdx[cid] || 0;
+      S.cardPhotoIdx[cid] = (cur + 1) % photos.length;
+      render();
+    }
+  }
+  else if(a==="prevphoto"){
+    e.stopPropagation();
+    const cid = el.dataset.v;
+    const p = S.profiles[cid];
+    const photos = userPhotos(p);
+    if(photos.length > 1){
+      const cur = S.cardPhotoIdx[cid] || 0;
+      S.cardPhotoIdx[cid] = (cur - 1 + photos.length) % photos.length;
+      render();
+    }
+  }
   else if(a==="openannouncements"){announcementsModal()}
   else if(a==="annfilter"){announcementsModal(v)}
   else if(a==="copycode"){
@@ -759,6 +1024,10 @@ document.addEventListener("click",async e=>{
       try{
         await navigator.clipboard.writeText(code);
         toast(`Promo code ${code} copied! 🎉`);
+        el.classList.add("copied");
+        const orig = el.innerHTML;
+        el.innerHTML = "✓ Copied!";
+        setTimeout(() => { el.classList.remove("copied"); el.innerHTML = orig; }, 2000);
       }catch{
         toast(`Promo code: ${code}`);
       }
@@ -767,10 +1036,11 @@ document.addEventListener("click",async e=>{
     }
   }
   else if(a==="removephoto"){
-    if(confirm("Remove your profile photo?")){
+    if(confirm("Remove your profile photos?")){
       const cur = myP() || {};
-      await saveProfile({ ...cur, photoURL: "" });
-      toast("Profile photo removed.");
+      await saveProfile({ ...cur, photoURL: "", photos: [] });
+      toast("Profile photos removed.");
+      render();
     }
   }
   else if(a==="like"||a==="pass"){
@@ -807,6 +1077,7 @@ document.addEventListener("click",async e=>{
   else if(a==="deltrip"){if(confirm("Delete this trip?")){await safe(()=>S.db.doc("trips/"+v).delete());S.view=null;render()}}
   else if(a==="gfilter"){S.groupFilter=v;render()}
   else if(a==="newgroup"){groupModal()}
+  else if(a==="newevent"){eventModal()}
   else if(a==="opengroup"){S.view={type:"group",id:v};openSub("g"+v,"groups/"+v+"/posts");render();scrollTo(0,0)}
   else if(a==="join"){await safe(()=>S.db.doc("joins/"+v+"+"+S.me).set({gid:v,uid:S.me,at:Date.now()}));toast("You're in! Say hi in the group posts.")}
   else if(a==="signout"){await signOut(S.auth)}
@@ -847,10 +1118,11 @@ document.addEventListener("submit",async e=>{
     const fd=Object.fromEntries(new FormData(f));const pick=n=>[...f.querySelectorAll(`[data-chips="${n}"] .chip.on`)].map(c=>c.dataset.v);
     const lo=Math.max(18,+fd.ageMin||18),hi=Math.max(lo,+fd.ageMax||99);
     if(+fd.age<18) return toast("Roammate is for adults 18+");
-    const photoURL = myP()?.photoURL || S.user?.photoURL || "";
+    const photos = userPhotos(myP());
+    const photoURL = photos[0] || myP()?.photoURL || S.user?.photoURL || "";
     const email = myP()?.email || S.user?.email || "";
     await saveProfile({name:fd.name.trim(),age:+fd.age,gender:fd.gender,city:fd.city.trim(),bio:fd.bio.trim(),travelStyle:fd.travelStyle,
-      interests:pick("interests"),interestedIn:pick("interestedIn"),ageMin:lo,ageMax:hi,photoURL,email});
+      interests:pick("interests"),interestedIn:pick("interestedIn"),ageMin:lo,ageMax:hi,photoURL,photos,email});
     S.editing=false; render(); return;
   }
   const kind=f.dataset.form, v=f.dataset.v;
@@ -868,6 +1140,25 @@ document.addEventListener("submit",async e=>{
     const ref=S.db.collection("groups").doc();
     await safe(async()=>{await ref.set({...fd,capacity:+fd.capacity||8,tags,host:S.me,createdAt:Date.now()});await S.db.doc("joins/"+ref.id+"+"+S.me).set({gid:ref.id,uid:S.me,at:Date.now()})});
     $("#overlay").innerHTML="";S.view={type:"group",id:ref.id};openSub("g"+ref.id,"groups/"+ref.id+"/posts");render()}
+  else if(kind==="event"){
+    const fd=Object.fromEntries(new FormData(f));
+    const title=fd.title.trim(), place=fd.place.trim(), date=fd.date, time=fd.time.trim(), vibe=fd.vibe, capacity=+fd.capacity||16, description=fd.description.trim();
+    if(!title||!place) return;
+    const ref=S.db.collection("groups").doc();
+    await safe(async()=>{
+      await ref.set({
+        title, place, start: date, end: date, date, time, vibe, capacity, description,
+        host: S.me, isEvent: true, type: "event", tags: [vibe, "Event", "Meetup"], createdAt: Date.now()
+      });
+      await S.db.doc("joins/"+ref.id+"+"+S.me).set({gid:ref.id,uid:S.me,at:Date.now()});
+    });
+    $("#overlay").innerHTML="";
+    S.groupFilter="events";
+    S.view={type:"group",id:ref.id};
+    openSub("g"+ref.id,"groups/"+ref.id+"/posts");
+    render();
+    toast("Event published! You're the host. 🌴");
+  }
   else if(kind==="post"){const ta=f.querySelector("textarea");const t=ta.value.trim();if(!t)return;ta.value="";
     await safe(()=>S.db.collection("groups/"+v+"/posts").add({from:S.me,text:t,at:Date.now()}))}
 });
