@@ -281,7 +281,7 @@ function initSwipe(){
   let startX = 0, startY = 0, curX = 0, curY = 0, dragging = false;
 
   card.addEventListener("pointerdown", e => {
-    if(e.target.closest("button") || e.target.closest(".chip")) return;
+    if(e.target.closest("button") || e.target.closest(".chip") || e.target.closest(".photo-counter")) return;
     dragging = true;
     startX = e.clientX;
     startY = e.clientY;
@@ -320,6 +320,24 @@ function initSwipe(){
       if(nopeStamp) nopeStamp.style.opacity = 1;
       setTimeout(() => decide(cid, false), 220);
     } else {
+      if(Math.abs(curX) < 15 && Math.abs(curY) < 15){
+        const p = S.profiles[cid];
+        const photos = userPhotos(p);
+        if(photos.length > 1){
+          const rect = card.getBoundingClientRect();
+          const tapX = startX - rect.left;
+          const cur = S.cardPhotoIdx[cid] || 0;
+          if(tapX < rect.width * 0.45){
+            S.cardPhotoIdx[cid] = (cur - 1 + photos.length) % photos.length;
+            render();
+            return;
+          } else if(tapX > rect.width * 0.55){
+            S.cardPhotoIdx[cid] = (cur + 1) % photos.length;
+            render();
+            return;
+          }
+        }
+      }
       card.classList.add("anim-reset");
       card.style.transform = "";
       if(likeStamp) likeStamp.style.opacity = 0;
@@ -456,8 +474,6 @@ function discoverView(){
       <div class="photo-counter" data-act="viewphoto" data-url="${esc(activePhoto)}" data-title="${esc(p.name)}" data-caption="${esc(p.city||'')}">
         ${curIdx + 1}/${photos.length} 📷
       </div>
-      <div class="card-tap-prev" data-act="prevphoto" data-v="${id}"></div>
-      <div class="card-tap-next" data-act="nextphoto" data-v="${id}"></div>
     ` : "";
     body=`<div class="pcard-wrap">
       <div class="pcard swiping" id="active-card" data-cid="${id}" style="background:linear-gradient(160deg,${color(id)}cc,${color(id)} 55%,#1d1a18)">
@@ -598,7 +614,7 @@ function tripView(id){
 function tripModal(withId){
   const today=new Date().toISOString().slice(0,10);
   const later=new Date(Date.now()+4*864e5).toISOString().slice(0,10);
-  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal" onclick="event.stopPropagation()">
+  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal">
   <div class="modal-handle"></div>
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
     <div>
@@ -689,7 +705,7 @@ function renderEventCard(id, g){
           ${mem.length ? `<div class="av-stack">${previewAvs}</div>` : ''}
           <span>${mem.length}/${cap} travelers</span>
         </div>
-        <button class="rsvp-btn ${isGoing ? 'going' : 'not-going'}" data-act="${isGoing ? 'leave' : 'join'}" data-v="${id}" onclick="event.stopPropagation()">
+        <button class="rsvp-btn ${isGoing ? 'going' : 'not-going'}" data-act="${isGoing ? 'leave' : 'join'}" data-v="${id}">
           ${isGoing ? '✓ Going' : '+ RSVP'}
         </button>
       </div>
@@ -758,7 +774,7 @@ function groupView(id){
 
 function groupModal(){
   const today=new Date(Date.now()+14*864e5).toISOString().slice(0,10),later=new Date(Date.now()+19*864e5).toISOString().slice(0,10);
-  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal" onclick="event.stopPropagation()">
+  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal">
   <div class="modal-handle"></div>
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
     <div>
@@ -779,7 +795,7 @@ function groupModal(){
 
 function eventModal(){
   const today=new Date(Date.now()+7*864e5).toISOString().slice(0,10);
-  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal" onclick="event.stopPropagation()">
+  $("#overlay").innerHTML=`<div class="modal-bg" data-act="closemodal"><div class="modal">
   <div class="modal-handle"></div>
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
     <div>
@@ -888,7 +904,7 @@ function lightboxModal(url, title = "", caption = ""){
   $("#overlay").innerHTML = `
     <div class="lightbox-bg" data-act="closelightbox">
       <button class="lightbox-close" data-act="closelightbox" aria-label="Close">${ICON.x}</button>
-      <div class="lightbox-card" onclick="event.stopPropagation()">
+      <div class="lightbox-card">
         <img class="lightbox-img" src="${esc(url)}" alt="${esc(title||'Travel photo')}">
         ${(title || caption) ? `<div class="lightbox-caption">${title ? `<b>${esc(title)}</b>` : ""}${caption ? ` · ${esc(caption)}` : ""}</div>` : ""}
       </div>
@@ -903,7 +919,7 @@ function announcementsModal(filter = S.annFilter || "all"){
   const list = filter === "all" ? all : all.filter(a => a.type === filter);
   $("#overlay").innerHTML = `
     <div class="modal-bg" data-act="closemodal">
-      <div class="modal announce-modal" onclick="event.stopPropagation()">
+      <div class="modal announce-modal">
         <div class="modal-handle"></div>
         <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
           <div>
@@ -992,10 +1008,11 @@ document.addEventListener("click",async e=>{
     lightboxModal(el.dataset.url, el.dataset.title, el.dataset.caption);
   }
   else if(a==="closelightbox"){
-    $("#overlay").innerHTML = "";
+    if(e.target===el || el.tagName==="BUTTON" || el.classList.contains("lightbox-close")){
+      $("#overlay").innerHTML = "";
+    }
   }
   else if(a==="nextphoto"){
-    e.stopPropagation();
     const cid = el.dataset.v;
     const p = S.profiles[cid];
     const photos = userPhotos(p);
@@ -1006,7 +1023,6 @@ document.addEventListener("click",async e=>{
     }
   }
   else if(a==="prevphoto"){
-    e.stopPropagation();
     const cid = el.dataset.v;
     const p = S.profiles[cid];
     const photos = userPhotos(p);
@@ -1064,7 +1080,7 @@ document.addEventListener("click",async e=>{
     const inp=document.querySelector(`[data-keep="act_${tid}_${d}"]`);
     if(inp){ inp.value=txt; inp.focus(); }
   }
-  else if(a==="closemodal"){if(e.target===el||el.tagName==="BUTTON")$("#overlay").innerHTML=""}
+  else if(a==="closemodal"){if(e.target===el||el.tagName==="BUTTON"||el.classList.contains("modal-close"))$("#overlay").innerHTML=""}
   else if(a==="openchat"){$("#overlay").innerHTML="";S.tab="matches";S.view={type:"chat",id:v};openSub(chatId(S.me,v),"chats/"+chatId(S.me,v)+"/msgs");render();}
   else if(a==="back"){closeSubs();S.view=null;render()}
   else if(a==="edit"){S.editing=true;render();scrollTo(0,0)}
