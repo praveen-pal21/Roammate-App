@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#26221F"/>
+      <stop offset="100%" stop-color="#141210"/>
+    </linearGradient>
+    <linearGradient id="coral" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2583E"/>
+      <stop offset="100%" stop-color="#B83A24"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F5B700"/>
+      <stop offset="100%" stop-color="#D48B12"/>
+    </linearGradient>
+  </defs>
+  <!-- Background squircle -->
+  <rect width="512" height="512" rx="128" fill="url(#bg)"/>
+  
+  <!-- Outer Compass Ring -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="url(#coral)" stroke-width="20" stroke-linecap="round"/>
+  
+  <!-- Subtle Latitude & Longitude lines -->
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="6"/>
+  <ellipse cx="256" cy="256" rx="75" ry="130" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="6"/>
+  <line x1="126" y1="256" x2="386" y2="256" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="6"/>
+  
+  <!-- Compass Needle / Spark Points -->
+  <!-- North (Coral) -->
+  <polygon points="256,92 284,244 256,220" fill="#FF7052"/>
+  <polygon points="256,92 228,244 256,220" fill="url(#coral)"/>
+  <!-- South (White/Gold) -->
+  <polygon points="256,420 284,268 256,292" fill="#EAE6E1"/>
+  <polygon points="256,420 228,268 256,292" fill="#B3ACA3"/>
+  <!-- East -->
+  <polygon points="420,256 268,228 292,256" fill="#F5B700"/>
+  <polygon points="420,256 268,284 292,256" fill="url(#gold)"/>
+  <!-- West -->
+  <polygon points="92,256 244,228 220,256" fill="#FAF7F2"/>
+  <polygon points="92,256 244,284 220,256" fill="#D9D4CC"/>
+  
+  <!-- Center Heart & Pivot -->
+  <circle cx="256" cy="256" r="32" fill="#141210" stroke="url(#coral)" stroke-width="8"/>
+  <circle cx="256" cy="256" r="14" fill="#FF7052"/>
+</svg>

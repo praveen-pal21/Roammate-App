@@ -80,14 +80,247 @@ const userPhotos = p => (p?.photos && Array.isArray(p.photos) && p.photos.length
 const av = (id,name,cls="",extra="") => {
   const p = S.profiles[id] || (id===S.me ? myP() : null);
   const photo = p?.photoURL || (p?.photos && p.photos[0]) || (id===S.me ? (myP()?.photoURL || S.user?.photoURL) : "");
-  if(photo) return `<div class="avatar ${cls} has-img" style="background-image:url('${esc(photo)}');${extra}"></div>`;
+  if(photo) return `<div class="avatar ${cls} has-img" style="background-image:url('${esc(photo)}');${extra}"><img src="${esc(photo)}" alt="${esc(name || 'Avatar')}" loading="lazy" decoding="async" style="opacity:0;position:absolute;pointer-events:none;width:1px;height:1px"></div>`;
   return `<div class="avatar ${cls}" style="background:${color(id)};${extra}">${initial(name)}</div>`;
 };
 const chatId = (a,b) => [a,b].sort().join("+");
 const fmtTime = t => new Date(t).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
 const fmtDate = d => d ? new Date(d+"T00:00").toLocaleDateString([], {day:"numeric",month:"short"}) : "";
 const pname = id => S.profiles[id]?.name || (id === S.me ? (S.user?.displayName || "Traveler") : "Traveler");
-function toast(msg){const t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+
+function toast(msg, type = "info"){
+  const icons = { success: "✓", error: "✕", warning: "!", info: "ℹ" };
+  const t = document.createElement("div");
+  t.className = `toast ${type}`;
+  t.setAttribute("role", "status");
+  t.setAttribute("aria-live", "polite");
+  t.innerHTML = `<span class="toast-icon">${icons[type] || "ℹ"}</span><span>${esc(msg)}</span>`;
+  document.body.appendChild(t);
+  setTimeout(() => {
+    t.classList.add("toast-out");
+    setTimeout(() => t.remove(), 250);
+  }, 2600);
+}
+
+function getCookieConsent(){
+  try {
+    const raw = localStorage.getItem("roammate_cookie_consent");
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function setCookieConsent(consent){
+  try {
+    localStorage.setItem("roammate_cookie_consent", JSON.stringify(consent));
+  } catch {}
+  const banner = document.getElementById("cookie-banner");
+  if(banner) banner.innerHTML = "";
+}
+
+function renderCookieBanner(){
+  if(getCookieConsent()) return;
+  const banner = document.getElementById("cookie-banner");
+  if(!banner) return;
+  banner.innerHTML = `
+    <div class="cookie-banner">
+      <div class="cookie-text">
+        🍪 <b>Your privacy matters.</b> We use essential local storage to keep you signed in and optional analytics to improve your travel experience.
+      </div>
+      <div class="cookie-actions">
+        <button class="cookie-btn" data-act="rejectcookies">Reject Optional</button>
+        <button class="cookie-btn" data-act="opencookieprefs">Customize</button>
+        <button class="cookie-btn primary" data-act="acceptallcookies">Accept All</button>
+      </div>
+    </div>
+  `;
+}
+
+function cookiePreferencesModal(){
+  const consent = getCookieConsent() || { essential: true, analytics: true, marketing: true };
+  $("#overlay").innerHTML = `
+    <div class="modal-bg" data-act="closemodal">
+      <div class="modal">
+        <div class="modal-handle"></div>
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <div class="eyebrow">Privacy &amp; Data</div>
+            <h2 style="margin:2px 0 0;font-size:22px">Cookie Preferences</h2>
+          </div>
+          <button class="modal-close" data-act="closemodal" aria-label="Close">${ICON.x}</button>
+        </div>
+        <form data-form="cookieprefs">
+          <div class="cookie-pref-group">
+            <div>
+              <div class="cookie-pref-title">Strictly Necessary</div>
+              <div class="cookie-pref-desc">Required for signing in, form draft preservation, and security. Cannot be disabled.</div>
+            </div>
+            <label class="switch-input">
+              <input type="checkbox" name="essential" checked disabled>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+          <div class="cookie-pref-group">
+            <div>
+              <div class="cookie-pref-title">Analytics &amp; Performance</div>
+              <div class="cookie-pref-desc">Measures feature usage and anonymous app performance to make Roammate faster.</div>
+            </div>
+            <label class="switch-input">
+              <input type="checkbox" name="analytics" ${consent.analytics ? "checked" : ""}>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+          <div class="cookie-pref-group">
+            <div>
+              <div class="cookie-pref-title">Updates &amp; Partner Offers</div>
+              <div class="cookie-pref-desc">Enables notifications for travel deals, exclusive promo codes, and maker desk updates.</div>
+            </div>
+            <label class="switch-input">
+              <input type="checkbox" name="marketing" ${consent.marketing ? "checked" : ""}>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+          <div class="row" style="margin-top:18px;gap:8px">
+            <button class="btn primary" type="submit">Save Preferences</button>
+            <button class="btn ghost" type="button" data-act="closemodal">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function contactModal(){
+  const curP = myP() || {};
+  const defaultName = curP.name || S.user?.displayName || "";
+  const defaultEmail = S.user?.email || curP.email || "";
+  $("#overlay").innerHTML = `
+    <div class="modal-bg" data-act="closemodal">
+      <div class="modal">
+        <div class="modal-handle"></div>
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <div class="eyebrow" style="display:flex;align-items:center;gap:5px">${ICON.send} Contact &amp; Support</div>
+            <h2 style="margin:2px 0 0;font-size:22px">How can we help?</h2>
+          </div>
+          <button class="modal-close" data-act="closemodal" aria-label="Close">${ICON.x}</button>
+        </div>
+        <form data-form="contact">
+          <input type="text" name="_gotcha" tabindex="-1" autocomplete="off" style="display:none" aria-hidden="true">
+          <label>Your name</label>
+          <input name="name" required maxlength="50" value="${esc(defaultName)}" placeholder="e.g. Alex Traveler">
+          <label>Your email</label>
+          <input type="email" name="email" required maxlength="80" value="${esc(defaultEmail)}" placeholder="you@example.com">
+          <label>Category</label>
+          <select name="category">
+            <option value="feedback">✨ Product Feedback &amp; Ideas</option>
+            <option value="issue">🐛 Bug Report / Technical Issue</option>
+            <option value="safety">🛡️ Safety, Trust &amp; Moderation</option>
+            <option value="inquiry">💼 Partnerships &amp; Press</option>
+            <option value="other">💬 General Inquiry</option>
+          </select>
+          <label>Message</label>
+          <textarea name="message" required minlength="10" maxlength="1000" rows="4" placeholder="Tell us what's on your mind..."></textarea>
+          <div style="margin-top:16px">
+            <button class="btn primary" type="submit">Send Message</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function guidelinesModal(){
+  $("#overlay").innerHTML = `
+    <div class="modal-bg" data-act="closemodal">
+      <div class="modal">
+        <div class="modal-handle"></div>
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <div class="eyebrow">Safety &amp; Trust</div>
+            <h2 style="margin:2px 0 0;font-size:22px">Community Guidelines</h2>
+          </div>
+          <button class="modal-close" data-act="closemodal" aria-label="Close">${ICON.x}</button>
+        </div>
+        <div class="stack" style="font-size:13px;line-height:1.5;color:var(--text);margin-top:8px">
+          <p>Roammate was built on curiosity, respect, and shared wanderlust. We hold our community to straightforward safety principles:</p>
+          <div class="card" style="padding:12px">
+            <b>1. Authenticity &amp; Honesty</b>
+            <div class="small muted">Use your real first name and genuine travel photos. Misrepresentation or impersonation leads to account suspension.</div>
+          </div>
+          <div class="card" style="padding:12px">
+            <b>2. Mutual Respect &amp; Boundaries</b>
+            <div class="small muted">No harassment, hate speech, or unsolicited commercial promotion. "No" always means no.</div>
+          </div>
+          <div class="card" style="padding:12px">
+            <b>3. Safe Travel Habits</b>
+            <div class="small muted">Always meet matches in public places first (cafes, trailheads, hostels). Share your itinerary with a trusted friend before heading out on expeditions.</div>
+          </div>
+          <div class="card" style="padding:12px">
+            <b>4. Zero Tolerance for Abuse</b>
+            <div class="small muted">Report any suspicious, harassing, or dangerous behavior immediately through our Contact &amp; Support form.</div>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <button class="btn forest" data-act="closemodal">Got it, let's roam safely</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderFooter(){
+  return `
+    <footer class="app-footer">
+      <div class="footer-links">
+        <button type="button" data-act="openannouncements">Maker's Desk &amp; Offers</button>
+        <button type="button" data-act="openguidelines">Community Safety</button>
+        <button type="button" data-act="opencookieprefs">Cookie Settings</button>
+        <button type="button" data-act="opencontact">Contact &amp; Support</button>
+      </div>
+      <div class="small muted">Roammate © 2026 · Crafted with ❤️ for curious wanderers</div>
+    </footer>
+  `;
+}
+
+function trackEvent(name, params = {}){
+  const consent = getCookieConsent();
+  const allowed = consent ? consent.analytics : false;
+  const payload = { event: name, ...params, timestamp: Date.now() };
+  try {
+    window._roammate_events = window._roammate_events || [];
+    window._roammate_events.push(payload);
+  } catch {}
+  if(allowed && window.gtag){
+    try { window.gtag("event", name, params); } catch {}
+  }
+}
+
+function updateDocumentTitle(tab, view){
+  let title = "Roammate — Date, Connect, Travel";
+  if(view?.type === "chat"){
+    title = `Chat with ${pname(view.id)} — Roammate`;
+  } else if(view?.type === "trip"){
+    const tr = S.trips[view.id];
+    title = `${tr?.title || "Trip Itinerary"} — Roammate`;
+  } else if(view?.type === "group"){
+    const all = { ...S.groups };
+    SAMPLE_EVENTS.forEach(ev => { if(!all[ev.id]) all[ev.id] = ev; });
+    const g = all[view.id];
+    title = `${g?.title || "Group Expedition"} — Roammate`;
+  } else if(tab === "discover"){
+    title = "Discover Travelers & Companions — Roammate";
+  } else if(tab === "matches"){
+    title = "Your Mutual Matches & Conversations — Roammate";
+  } else if(tab === "trips"){
+    title = "Plan Shared Itineraries — Roammate";
+  } else if(tab === "groups"){
+    title = S.groupFilter === "events" ? "Community Meetups & Events — Roammate" : "Group Travel & Expeditions — Roammate";
+  } else if(tab === "profile"){
+    title = "Your Travel Identity & Settings — Roammate";
+  }
+  document.title = title;
+}
+
 const ICON = {
   discover:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>',
   matches:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
@@ -216,17 +449,20 @@ async function saveProfile(data){
     if(!S.likes[S.me]) await S.db.doc("likes/"+S.me).set({liked:[],passed:[]});});
 }
 async function decide(id,like){
+  trackEvent(like ? "swipe_like" : "swipe_pass", { profile_id: id });
   const l=myLikes(); const liked=[...(l.liked||[])], passed=[...(l.passed||[])];
   (like?liked:passed).push(id);
   S.likes[S.me]={liked,passed}; render();
   await safe(()=>S.db.doc("likes/"+S.me).set({liked,passed}));
   if(like && likesMe(id)){
+    trackEvent("match_spark", { matched_with: id });
     const cid=chatId(S.me,id);
     if(!S.chats[cid]) await safe(()=>S.db.doc("chats/"+cid).set({members:[S.me,id].sort(),lastAt:Date.now(),last:"",lastFrom:""}));
     showMatch(id);
   }
 }
 async function sendMsg(cid,text){
+  trackEvent("chat_message_sent", { chat_id: cid });
   const other=cid.split("+").find(x=>x!==S.me);
   await safe(async()=>{
     await S.db.doc("chats/"+cid).set({members:[S.me,other].sort(),last:text.slice(0,120),lastFrom:S.me,lastAt:Date.now()});
@@ -355,6 +591,7 @@ function render(){
     app.innerHTML=`<div class="eyebrow" style="opacity:.6">Roammate</div><div class="skeleton-card" style="margin-top:14px"></div>`;
     return;
   }
+  updateDocumentTitle(S.tab, S.view);
   if(!myP() || S.editing){ $("#nav").hidden=!myP(); app.innerHTML=profileForm(!myP()); if(myP())renderNav(); restoreInputs(k); return; }
   renderNav();
   let html="";
@@ -465,7 +702,7 @@ function discoverView(){
     const curIdx = S.cardPhotoIdx[id] || 0;
     const activePhoto = photos[curIdx] || photos[0] || p.photoURL || "";
     const cardAv = activePhoto
-      ? `<div class="bigav has-img" style="background-image:url('${esc(activePhoto)}');cursor:pointer" data-act="viewphoto" data-url="${esc(activePhoto)}" data-title="${esc(p.name)}" data-caption="${esc(p.city||'')}"></div>`
+      ? `<div class="bigav has-img" style="background-image:url('${esc(activePhoto)}');cursor:pointer" data-act="viewphoto" data-url="${esc(activePhoto)}" data-title="${esc(p.name)}" data-caption="${esc(p.city||'')}"><img src="${esc(activePhoto)}" alt="${esc(p.name)}" fetchpriority="high" loading="eager" decoding="async" style="opacity:0;position:absolute;pointer-events:none;width:1px;height:1px"></div>`
       : `<div class="bigav">${initial(p.name)}</div>`;
     const storyBarsHtml = photos.length > 1 ? `
       <div class="story-bars">
@@ -601,7 +838,14 @@ function tripView(id){
     <form class="row" style="margin-top:8px" data-form="act" data-v="${id}" data-d="${d}"><input style="flex:2" data-keep="act_${id}_${d}" placeholder="Add a Day ${d} activity" maxlength="80">
     <input style="flex:1" type="time" data-keep="actt_${id}_${d}"><button class="btn forest sm" style="flex:none" type="submit">Add</button></form></div>`;
   }
-  return `<button class="back" data-act="back">${ICON.left} Trips</button>${tripCard(id,tr).replace('data-act="opentrip"','')}
+  const crumbs = `
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <button class="crumb-btn" data-act="back">${ICON.trips} Trips</button>
+      <span class="crumb-sep">›</span>
+      <span class="crumb-current">${esc(tr.title)}</span>
+    </nav>
+  `;
+  return `${crumbs}${tripCard(id,tr).replace('data-act="opentrip"','')}
   ${tr.notes?`<p class="muted small" style="margin:10px 2px">${esc(tr.notes)}</p>`:""}
   ${days}
   <h2>Travel together</h2>
@@ -756,8 +1000,16 @@ function groupView(id){
   SAMPLE_EVENTS.forEach(ev => { if(!allGroups[ev.id]) allGroups[ev.id] = ev; });
   const g=allGroups[id]; if(!g) return `<button class="back" data-act="back">${ICON.left} All group trips</button><div class="empty">This group was removed.</div>`;
   const mem=groupMembers(id); const joined=mem.includes(S.me); const full=mem.length>=(+g.capacity||10);
-  const posts=S.sub.key==="g"+id?S.sub.items:[];
-  return `<button class="back" data-act="back">${ICON.left} All group trips</button>
+  const isEv = g.isEvent || g.type === "event" || (g.tags||[]).includes("Event") || (g.tags||[]).includes("Meetup");
+  const crumbLabel = isEv ? "Meetups & Events" : "Expeditions";
+  const crumbs = `
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <button class="crumb-btn" data-act="back">${ICON.groups} ${crumbLabel}</button>
+      <span class="crumb-sep">›</span>
+      <span class="crumb-current">${esc(g.title)}</span>
+    </nav>
+  `;
+  return `${crumbs}
   <div class="tripcard" style="cursor:default"><h2 style="color:#fff;margin:0 0 2px">${esc(g.title)}</h2><div class="m">${esc(g.place)} · ${g.time ? esc(g.time)+' · ' : ''}${fmtDate(g.date||g.start)}${g.end&&g.end!==g.start?' – '+fmtDate(g.end):''}</div>
   <p style="margin:10px 0 6px">${esc(g.description||"")}</p><div class="m">${mem.length}/${esc(g.capacity||10)} travelers · Hosted by ${g.host?(g.host===S.me?"you":esc(pname(g.host))):"Roammate Community"}</div></div>
   <div style="margin-top:12px">${joined?`<button class="btn ghost" data-act="leave" data-v="${id}">Leave group</button>`
@@ -862,7 +1114,8 @@ function profileView(){
     </div>
   </div>
   <button class="btn ghost" style="margin-top:10px" data-act="restart">Show people I passed on again</button>
-  <button class="btn forest" style="margin-top:10px" data-act="signout">Sign out</button>`;
+  <button class="btn forest" style="margin-top:10px" data-act="signout">Sign out</button>
+  ${renderFooter()}`;
 }
 
 function ensurePhotoInput(allowMultiple = true){
@@ -1036,6 +1289,7 @@ document.addEventListener("click",async e=>{
   else if(a==="annfilter"){announcementsModal(v)}
   else if(a==="copycode"){
     const code = el.dataset.code || v;
+    if(code) trackEvent("promo_code_copied", { code });
     if(code && navigator.clipboard){
       try{
         await navigator.clipboard.writeText(code);
@@ -1095,12 +1349,17 @@ document.addEventListener("click",async e=>{
   else if(a==="newgroup"){groupModal()}
   else if(a==="newevent"){eventModal()}
   else if(a==="opengroup"){S.view={type:"group",id:v};openSub("g"+v,"groups/"+v+"/posts");render();scrollTo(0,0)}
-  else if(a==="join"){await safe(()=>S.db.doc("joins/"+v+"+"+S.me).set({gid:v,uid:S.me,at:Date.now()}));toast("You're in! Say hi in the group posts.")}
+  else if(a==="join"){await safe(()=>S.db.doc("joins/"+v+"+"+S.me).set({gid:v,uid:S.me,at:Date.now()}));trackEvent("event_rsvp",{group_id:v,action:"join"});toast("You're in! Say hi in the group posts.","success")}
   else if(a==="signout"){await signOut(S.auth)}
   else if(a==="authmode"){S.authMode=v;renderAuth()}
   else if(a==="google"){try{await signInWithPopup(S.auth,new GoogleAuthProvider())}catch(err){authError(err)}}
   else if(a==="reset"){const em=document.querySelector('#authform [name=email]')?.value.trim();if(!em)return toast("Enter your email first");try{await sendPasswordResetEmail(S.auth,em);toast("Password reset email sent")}catch(err){authError(err)}}
-  else if(a==="leave"){await safe(()=>S.db.doc("joins/"+v+"+"+S.me).delete())}
+  else if(a==="leave"){await safe(()=>S.db.doc("joins/"+v+"+"+S.me).delete());trackEvent("event_rsvp",{group_id:v,action:"leave"});toast("You've left this group.","info")}
+  else if(a==="opencontact"){contactModal()}
+  else if(a==="openguidelines"){guidelinesModal()}
+  else if(a==="opencookieprefs"){cookiePreferencesModal()}
+  else if(a==="acceptallcookies"){setCookieConsent({essential:true,analytics:true,marketing:true});toast("Preferences saved! ✨","success")}
+  else if(a==="rejectcookies"){setCookieConsent({essential:true,analytics:false,marketing:false});toast("Optional cookies declined.","info")}
 });
 
 window.addEventListener("keydown", e => {
@@ -1139,6 +1398,7 @@ document.addEventListener("submit",async e=>{
     const email = myP()?.email || S.user?.email || "";
     await saveProfile({name:fd.name.trim(),age:+fd.age,gender:fd.gender,city:fd.city.trim(),bio:fd.bio.trim(),travelStyle:fd.travelStyle,
       interests:pick("interests"),interestedIn:pick("interestedIn"),ageMin:lo,ageMax:hi,photoURL,photos,email});
+    trackEvent("profile_saved",{name:fd.name.trim(),travelStyle:fd.travelStyle});
     S.editing=false; render(); return;
   }
   const kind=f.dataset.form, v=f.dataset.v;
@@ -1150,11 +1410,13 @@ document.addEventListener("submit",async e=>{
   else if(kind==="trip"){const fd=Object.fromEntries(new FormData(f));if(fd.end<fd.start)return toast("End date is before start date");
     const ref=S.db.collection("trips").doc();
     await safe(()=>ref.set({...fd,owner:S.me,invited:v?[v]:[],activities:{},createdAt:Date.now()}));
+    trackEvent("trip_created",{title:fd.title,destination:fd.destination});
     $("#overlay").innerHTML="";closeSubs();S.tab="trips";S.view={type:"trip",id:ref.id};render();scrollTo(0,0)}
   else if(kind==="group"){const fd=Object.fromEntries(new FormData(f));if(fd.end<fd.start)return toast("End date is before start date");
     const tags=[...f.querySelectorAll('[data-chips="gtags"] .chip.on')].map(c=>c.dataset.v);
     const ref=S.db.collection("groups").doc();
     await safe(async()=>{await ref.set({...fd,capacity:+fd.capacity||8,tags,host:S.me,createdAt:Date.now()});await S.db.doc("joins/"+ref.id+"+"+S.me).set({gid:ref.id,uid:S.me,at:Date.now()})});
+    trackEvent("group_created",{title:fd.title,place:fd.place});
     $("#overlay").innerHTML="";S.view={type:"group",id:ref.id};openSub("g"+ref.id,"groups/"+ref.id+"/posts");render()}
   else if(kind==="event"){
     const fd=Object.fromEntries(new FormData(f));
@@ -1168,15 +1430,55 @@ document.addEventListener("submit",async e=>{
       });
       await S.db.doc("joins/"+ref.id+"+"+S.me).set({gid:ref.id,uid:S.me,at:Date.now()});
     });
+    trackEvent("event_created",{title,place});
     $("#overlay").innerHTML="";
     S.groupFilter="events";
     S.view={type:"group",id:ref.id};
     openSub("g"+ref.id,"groups/"+ref.id+"/posts");
     render();
-    toast("Event published! You're the host. 🌴");
+    toast("Event published! You're the host. 🌴","success");
   }
   else if(kind==="post"){const ta=f.querySelector("textarea");const t=ta.value.trim();if(!t)return;ta.value="";
     await safe(()=>S.db.collection("groups/"+v+"/posts").add({from:S.me,text:t,at:Date.now()}))}
+  else if(kind==="contact"){
+    const fd=Object.fromEntries(new FormData(f));
+    if(fd._gotcha){
+      $("#overlay").innerHTML="";
+      toast("Thank you for your message! ✨","success");
+      return;
+    }
+    const now=Date.now();
+    if(window._lastContactTime && (now - window._lastContactTime < 60000)){
+      toast("Please wait a moment before sending another message.","warning");
+      return;
+    }
+    window._lastContactTime=now;
+    await safe(async()=>{
+      if(S.db){
+        await S.db.collection("feedback").add({
+          name:fd.name.trim(),
+          email:fd.email.trim(),
+          category:fd.category||"feedback",
+          message:fd.message.trim(),
+          uid:S.me||null,
+          createdAt:Date.now()
+        });
+      }
+    });
+    trackEvent("contact_form_submitted",{category:fd.category});
+    $("#overlay").innerHTML="";
+    toast("Thank you! Your note has been received. 💌","success");
+  }
+  else if(kind==="cookieprefs"){
+    const fd=Object.fromEntries(new FormData(f));
+    setCookieConsent({
+      essential:true,
+      analytics:!!fd.analytics,
+      marketing:!!fd.marketing
+    });
+    $("#overlay").innerHTML="";
+    toast("Cookie preferences saved! ✨","success");
+  }
 });
 
 // ---------- auth + boot ----------
@@ -1198,10 +1500,12 @@ function renderAuth(){
     <div style="margin-top:10px"><button class="btn ghost" type="button" data-act="google">Continue with Google</button></div>
     <p class="small muted" style="text-align:center;margin:14px 0 0">${up?`Already have an account? <a href="#" data-act="authmode" data-v="login" style="color:var(--accent)">Log in</a>`
       :`New here? <a href="#" data-act="authmode" data-v="signup" style="color:var(--accent)">Create an account</a> · <a href="#" data-act="reset" style="color:var(--accent)">Forgot password</a>`}</p>
-  </form>`;
+  </form>
+  ${renderFooter()}`;
 }
 let unsubs=[];
 function boot(){
+  renderCookieBanner();
   if(!firebaseConfig?.apiKey || firebaseConfig.apiKey.startsWith("YOUR_")){
     $("#app").innerHTML=`<div class="eyebrow">Setup needed</div><h1>Add your Firebase config</h1><p class="sub">Open <b>firebase-config.js</b> and paste your Firebase web app config. See README.md for the steps.</p>`;return;
   }
