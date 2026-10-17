@@ -66,6 +66,12 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if false;
     }
+
+    // Feedback & contact submissions: signed in users can create submissions; read/update/delete disallowed for clients
+    match /feedback/{fid} {
+      allow create: if signedIn();
+      allow read, update, delete: if false;
+    }
   }
 }
 

@@ -114,13 +114,21 @@ function setCookieConsent(consent){
     localStorage.setItem("roammate_cookie_consent", JSON.stringify(consent));
   } catch {}
   const banner = document.getElementById("cookie-banner");
-  if(banner) banner.innerHTML = "";
+  if(banner){
+    banner.innerHTML = "";
+    banner.style.display = "none";
+  }
 }
 
 function renderCookieBanner(){
-  if(getCookieConsent()) return;
   const banner = document.getElementById("cookie-banner");
   if(!banner) return;
+  if(getCookieConsent()){
+    banner.innerHTML = "";
+    banner.style.display = "none";
+    return;
+  }
+  banner.style.display = "";
   banner.innerHTML = `
     <div class="cookie-banner">
       <div class="cookie-text">
@@ -991,24 +999,29 @@ function groupsView(){
     <div class="small muted">${mem.length}/${cap} travelers · ${spotsLeft>0?spotsLeft+' left':'Full'}</div>
     ${mem.length?`<div class="av-stack">${previewAvs}</div>`:""}
     ${g.sample?'<span class="tag" style="margin-top:6px">Sample</span>':""}</div>`}).join("")}</div>`)
-  : `<div class="card empty">${ICON.groups}<h3>${S.groupFilter==="mine"?"You haven't joined anything yet":isEventsTab?"No meetups scheduled yet":"No group expeditions yet"}</h3></div>`}
+  : `<div class="card empty">${ICON.groups}<h3>${S.groupFilter==="mine"?"You haven't joined anything yet":isEventsTab?"No meetups scheduled yet":"No group expeditions yet"}</h3><p class="small muted" style="margin-top:6px">${S.groupFilter==="mine" ? "Browse expeditions or meetups to find your tribe." : "Be the first to host one!"}</p>${S.groupFilter==="mine" ? `<button class="btn ghost sm" data-act="gfilter" data-v="foryou" style="margin-top:10px;display:inline-block">Explore Expeditions</button>` : ""}</div>`}
   <div style="margin-top:16px">${isEventsTab ? `<button class="btn forest" data-act="newevent">+ Host a meetup / event</button>` : `<button class="btn primary" data-act="newgroup">+ Host a group expedition</button>`}</div>`;
 }
 
 function groupView(id){
   const allGroups = { ...S.groups };
   SAMPLE_EVENTS.forEach(ev => { if(!allGroups[ev.id]) allGroups[ev.id] = ev; });
-  const g=allGroups[id]; if(!g) return `<button class="back" data-act="back">${ICON.left} All group trips</button><div class="empty">This group was removed.</div>`;
+  const g=allGroups[id];
+  if(!g){
+    if(!S.loaded) return '<div class="spin"></div>';
+    return `<button class="back" data-act="back">${ICON.left} All group trips</button><div class="empty">This group was removed.</div>`;
+  }
   const mem=groupMembers(id); const joined=mem.includes(S.me); const full=mem.length>=(+g.capacity||10);
   const isEv = g.isEvent || g.type === "event" || (g.tags||[]).includes("Event") || (g.tags||[]).includes("Meetup");
   const crumbLabel = isEv ? "Meetups & Events" : "Expeditions";
   const crumbs = `
     <nav class="breadcrumbs" aria-label="Breadcrumb">
-      <button class="crumb-btn" data-act="back">${ICON.groups} ${crumbLabel}</button>
+      <button class="crumb-btn" data-act="back">${ICON.left} ${crumbLabel}</button>
       <span class="crumb-sep">›</span>
       <span class="crumb-current">${esc(g.title)}</span>
     </nav>
   `;
+  const posts = (S.sub.key === "g" + id ? S.sub.items : []) || [];
   return `${crumbs}
   <div class="tripcard" style="cursor:default"><h2 style="color:#fff;margin:0 0 2px">${esc(g.title)}</h2><div class="m">${esc(g.place)} · ${g.time ? esc(g.time)+' · ' : ''}${fmtDate(g.date||g.start)}${g.end&&g.end!==g.start?' – '+fmtDate(g.end):''}</div>
   <p style="margin:10px 0 6px">${esc(g.description||"")}</p><div class="m">${mem.length}/${esc(g.capacity||10)} travelers · Hosted by ${g.host?(g.host===S.me?"you":esc(pname(g.host))):"Roammate Community"}</div></div>
@@ -1349,12 +1362,26 @@ document.addEventListener("click",async e=>{
   else if(a==="newgroup"){groupModal()}
   else if(a==="newevent"){eventModal()}
   else if(a==="opengroup"){S.view={type:"group",id:v};openSub("g"+v,"groups/"+v+"/posts");render();scrollTo(0,0)}
-  else if(a==="join"){await safe(()=>S.db.doc("joins/"+v+"+"+S.me).set({gid:v,uid:S.me,at:Date.now()}));trackEvent("event_rsvp",{group_id:v,action:"join"});toast("You're in! Say hi in the group posts.","success")}
+  else if(a==="join"){
+    if(!S.canWrite) return toast("View-only access");
+    S.joins[v+"+"+S.me]={gid:v,uid:S.me,at:Date.now()};
+    render();
+    await safe(()=>S.db.doc("joins/"+v+"+"+S.me).set({gid:v,uid:S.me,at:Date.now()}));
+    trackEvent("event_rsvp",{group_id:v,action:"join"});
+    toast("You're in! Say hi in the group posts.","success");
+  }
   else if(a==="signout"){await signOut(S.auth)}
   else if(a==="authmode"){S.authMode=v;renderAuth()}
   else if(a==="google"){try{await signInWithPopup(S.auth,new GoogleAuthProvider())}catch(err){authError(err)}}
   else if(a==="reset"){const em=document.querySelector('#authform [name=email]')?.value.trim();if(!em)return toast("Enter your email first");try{await sendPasswordResetEmail(S.auth,em);toast("Password reset email sent")}catch(err){authError(err)}}
-  else if(a==="leave"){await safe(()=>S.db.doc("joins/"+v+"+"+S.me).delete());trackEvent("event_rsvp",{group_id:v,action:"leave"});toast("You've left this group.","info")}
+  else if(a==="leave"){
+    if(!S.canWrite) return toast("View-only access");
+    delete S.joins[v+"+"+S.me];
+    render();
+    await safe(()=>S.db.doc("joins/"+v+"+"+S.me).delete());
+    trackEvent("event_rsvp",{group_id:v,action:"leave"});
+    toast("You've left this group.","info");
+  }
   else if(a==="opencontact"){contactModal()}
   else if(a==="openguidelines"){guidelinesModal()}
   else if(a==="opencookieprefs"){cookiePreferencesModal()}
@@ -1415,19 +1442,36 @@ document.addEventListener("submit",async e=>{
   else if(kind==="group"){const fd=Object.fromEntries(new FormData(f));if(fd.end<fd.start)return toast("End date is before start date");
     const tags=[...f.querySelectorAll('[data-chips="gtags"] .chip.on')].map(c=>c.dataset.v);
     const ref=S.db.collection("groups").doc();
-    await safe(async()=>{await ref.set({...fd,capacity:+fd.capacity||8,tags,host:S.me,createdAt:Date.now()});await S.db.doc("joins/"+ref.id+"+"+S.me).set({gid:ref.id,uid:S.me,at:Date.now()})});
+    const newGroup = {
+      ...fd,
+      capacity:+fd.capacity||8,
+      tags,
+      host:S.me,
+      createdAt:Date.now()
+    };
+    S.groups[ref.id] = newGroup;
+    S.joins[ref.id+"+"+S.me] = {gid:ref.id,uid:S.me,at:Date.now()};
+    await safe(async()=>{
+      await ref.set(newGroup);
+      await S.db.doc("joins/"+ref.id+"+"+S.me).set({gid:ref.id,uid:S.me,at:Date.now()});
+    });
     trackEvent("group_created",{title:fd.title,place:fd.place});
-    $("#overlay").innerHTML="";S.view={type:"group",id:ref.id};openSub("g"+ref.id,"groups/"+ref.id+"/posts");render()}
+    $("#overlay").innerHTML="";S.view={type:"group",id:ref.id};openSub("g"+ref.id,"groups/"+ref.id+"/posts");render();scrollTo(0,0);
+    toast("Expedition published! Gather your crew. 🏔️","success");
+  }
   else if(kind==="event"){
     const fd=Object.fromEntries(new FormData(f));
     const title=fd.title.trim(), place=fd.place.trim(), date=fd.date, time=fd.time.trim(), vibe=fd.vibe, capacity=+fd.capacity||16, description=fd.description.trim();
     if(!title||!place) return;
     const ref=S.db.collection("groups").doc();
+    const newEvent = {
+      title, place, start: date, end: date, date, time, vibe, capacity, description,
+      host: S.me, isEvent: true, type: "event", tags: [vibe, "Event", "Meetup"], createdAt: Date.now()
+    };
+    S.groups[ref.id] = newEvent;
+    S.joins[ref.id+"+"+S.me] = {gid:ref.id,uid:S.me,at:Date.now()};
     await safe(async()=>{
-      await ref.set({
-        title, place, start: date, end: date, date, time, vibe, capacity, description,
-        host: S.me, isEvent: true, type: "event", tags: [vibe, "Event", "Meetup"], createdAt: Date.now()
-      });
+      await ref.set(newEvent);
       await S.db.doc("joins/"+ref.id+"+"+S.me).set({gid:ref.id,uid:S.me,at:Date.now()});
     });
     trackEvent("event_created",{title,place});
@@ -1436,10 +1480,17 @@ document.addEventListener("submit",async e=>{
     S.view={type:"group",id:ref.id};
     openSub("g"+ref.id,"groups/"+ref.id+"/posts");
     render();
-    toast("Event published! You're the host. 🌴","success");
+    scrollTo(0,0);
+    toast("Meetup published! You're the host. 🌴","success");
   }
-  else if(kind==="post"){const ta=f.querySelector("textarea");const t=ta.value.trim();if(!t)return;ta.value="";
-    await safe(()=>S.db.collection("groups/"+v+"/posts").add({from:S.me,text:t,at:Date.now()}))}
+  else if(kind==="post"){
+    const ta=f.querySelector("textarea");
+    const t=ta.value.trim();
+    if(!t) return;
+    ta.value="";
+    await safe(()=>S.db.collection("groups/"+v+"/posts").add({from:S.me,text:t,at:Date.now()}));
+    toast("Post shared with the group! 💬","success");
+  }
   else if(kind==="contact"){
     const fd=Object.fromEntries(new FormData(f));
     if(fd._gotcha){
