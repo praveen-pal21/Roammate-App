@@ -28,45 +28,8 @@ const VIBE_IDEAS = {
   "Luxury": ["Rooftop sunset cocktails", "Fine dining dinner", "Spa afternoon", "Scenic harbor boat"],
   "Culture": ["Art gallery visit", "Ancient temple walk", "Folk museum exploration", "Local craft workshop"]
 };
-const DEFAULT_ANNOUNCEMENTS = [
-  {
-    id: "ann-welcome-2",
-    title: "🎉 Welcome to Roammate 2.0!",
-    type: "update",
-    badge: "New Feature",
-    date: "Oct 2026",
-    summary: "Interactive swipe physics, photo upload & travel icebreakers are now live!",
-    content: "We redesigned the matchmaking flow so you can swipe right to like or left to pass with real physics and haptic animations. Upload custom profile photos directly in your profile tab, and break the ice with curated travel prompts.",
-    actionText: "Try Photo Upload",
-    actionAct: "pickphoto"
-  },
-  {
-    id: "ann-offer-roampass",
-    title: "🎁 Maker's Exclusive: 20% Off RoamPass",
-    type: "offer",
-    badge: "Special Offer",
-    date: "Valid through Nov 2026",
-    summary: "Save 20% on verified community hostel stays & group adventure gear.",
-    content: "To support our growing community of solo backpackers and wanderers, use code ROAMFIRST20 on partner booking desks and gear rentals.",
-    code: "ROAMFIRST20",
-    actionText: "Copy Promo Code",
-    actionAct: "copycode"
-  },
-  {
-    id: "ann-meetup-autumn",
-    title: "🌴 Maker's Community Trek: Manali & Bali",
-    type: "event",
-    badge: "Community",
-    date: "Nov 15, 2026",
-    summary: "Official meetups & sunset viewpoints with the Roammate community.",
-    content: "Connect in person with fellow travelers! Head over to Group Trips to see scheduled meetups, share scooter convoys, and find companions for morning hikes.",
-    actionText: "Browse Group Trips",
-    actionAct: "tab",
-    actionTab: "groups"
-  }
-];
 
-const S = {db:null,user:null,me:null,canWrite:true,profiles:{},likes:{},chats:{},trips:{},groups:{},joins:{},
+const S = {db:null,user:null,me:null,profiles:{},likes:{},chats:{},trips:{},groups:{},joins:{},
   announcements:{},annFilter:"all",seenAnnouncements:null,cardPhotoIdx:{},
   tab:"discover",view:null,draft:{},sub:{},seenMatches:null,groupFilter:"foryou",editing:false};
 
@@ -152,7 +115,7 @@ function renderCookieBanner(){
 }
 
 function cookiePreferencesModal(){
-  const consent = getCookieConsent() || { essential: true, analytics: true, marketing: true };
+  const consent = getCookieConsent() || { essential: true, analytics: false, marketing: false };
   $("#overlay").innerHTML = `
     <div class="modal-bg" data-act="closemodal">
       <div class="modal">
@@ -319,9 +282,7 @@ function updateDocumentTitle(tab, view){
     const tr = S.trips[view.id];
     title = `${tr?.title || "Trip Itinerary"} — Roammate`;
   } else if(view?.type === "group"){
-    const all = { ...S.groups };
-    SAMPLE_EVENTS.forEach(ev => { if(!all[ev.id]) all[ev.id] = ev; });
-    const g = all[view.id];
+    const g = S.groups[view.id];
     title = `${g?.title || "Group Expedition"} — Roammate`;
   } else if(tab === "discover"){
     title = "Discover Travelers & Companions — Roammate";
@@ -394,7 +355,7 @@ async function compressImages(files, maxSize = 360, quality = 0.82) {
 // ---------- data derivations ----------
 const myP = () => S.profiles[S.me];
 const myLikes = () => S.likes[S.me] || {liked:[],passed:[]};
-const likesMe = id => { const l=S.likes[id]; return !!l && ((l.liked||[]).includes(S.me) || (l.liked||[]).includes("*")); };
+const likesMe = id => { const l=S.likes[id]; return !!l && (l.liked||[]).includes(S.me); };
 function matches(){
   const mine = myLikes().liked||[];
   return mine.filter(id => S.profiles[id] && likesMe(id));
@@ -427,7 +388,7 @@ function localSet(k,v){try{localStorage.setItem(k,v)}catch{}}
 function getAnnouncements(){
   const remote = Object.values(S.announcements||{});
   if(remote.length) return remote.sort((a,b)=>(b.at||0)-(a.at||0));
-  return DEFAULT_ANNOUNCEMENTS;
+  return [];
 }
 function getSeenAnnouncements(){
   if(S.seenAnnouncements!==null) return S.seenAnnouncements;
@@ -453,15 +414,19 @@ function markAnnouncementsSeen(){
 
 // ---------- writes ----------
 async function safe(fn){
-  try{await fn()}catch(e){
+  try{
+    await fn();
+    return true;
+  }catch(e){
     if(e?.code==="permission-denied") toast("You don't have permission to do that.");
     else if(e?.code==="resource-exhausted") toast("The app's storage quota is full.");
     else toast("Couldn't save — please try again.");
     logErr(e);
+    return false;
   }
 }
 async function saveProfile(data){
-  await safe(async()=>{await S.db.doc("profiles/"+S.me).set({...data,updatedAt:Date.now()});
+  return await safe(async()=>{await S.db.doc("profiles/"+S.me).set({...data,updatedAt:Date.now()});
     if(!S.likes[S.me]) await S.db.doc("likes/"+S.me).set({liked:[],passed:[]});});
 }
 async function decide(id,like){
@@ -519,8 +484,8 @@ function checkNewMatches(){
 function openSub(key,path,order){
   closeSubs();
   S.sub.items=[];S.sub.key=key;
-  S.sub.un=S.db.collection(path).orderBy("at","asc").limit(300).onSnapshot(snap=>{
-    S.sub.items=snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}));render();
+  S.sub.un=S.db.collection(path).orderBy("at","desc").limit(50).onSnapshot(snap=>{
+    S.sub.items=snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()})).reverse();render();
     const box=$(".msgs");if(box)box.scrollTop=box.scrollHeight;
   },e=>logWarn(path,e));
 }
@@ -693,7 +658,6 @@ function profileForm(isNew){
   return `${isNew?`<div class="hero-logo">${ICON.globe}</div><div class="eyebrow">Roammate</div><h1>Find your next<br><em>favorite person.</em></h1>
   <p class="sub">Meet people who travel like you do, then turn a spark into a shared story.</p>`
   :`<button class="back" data-act="canceledit">${ICON.left} Back</button><div class="eyebrow">Your profile</div><h1>Edit your travel identity</h1>`}
-  ${!S.canWrite?`<div class="banner">View-only access<small>Ask the owner for Contributor access to create a profile.</small></div>`:""}
   <form id="pform" class="card">
     ${googleBadge}
     ${photoSection}
@@ -708,7 +672,7 @@ function profileForm(isNew){
     <label>Show me</label>${chipset("interestedIn",GENDERS,p.interestedIn)}
     <div class="row"><div><label>Age from</label><input name="ageMin" data-keep="f_min" type="number" min="18" max="99" value="${esc(p.ageMin)}"></div>
     <div><label>to</label><input name="ageMax" data-keep="f_max" type="number" min="18" max="99" value="${esc(p.ageMax)}"></div></div>
-    <div style="margin-top:20px"><button class="btn primary" type="submit" ${S.canWrite?"":"disabled"}>${isNew?"Start exploring":"Save profile"}</button></div>
+    <div style="margin-top:20px"><button class="btn primary" type="submit">${isNew?"Start exploring":"Save profile"}</button></div>
   </form>`;
 }
 
@@ -821,7 +785,7 @@ function chatView(id){
   <div class="msgs"><div class="sys">You matched — say hello to ${esc(p.name)}.</div>
   ${icebreakerHTML}
   ${items.map(m=>`<div class="msg ${m.from===S.me?"me":""}">${esc(m.text)}<div class="t">${fmtTime(m.at)}</div></div>`).join("")}</div>
-  <form class="composer" data-form="msg" data-v="${cid}"><input data-keep="msg_${cid}" placeholder="Write something curious…" maxlength="1000" autocomplete="off" ${S.canWrite?"":"disabled"}>
+  <form class="composer" data-form="msg" data-v="${cid}"><input data-keep="msg_${cid}" placeholder="Write something curious…" maxlength="1000" autocomplete="off">
   <button class="btn primary sm" type="submit" aria-label="Send">${ICON.send}</button></form></div>`;
 }
 
@@ -901,48 +865,6 @@ function tripModal(withId){
   <div style="margin-top:16px"><button class="btn primary" type="submit">Create trip</button></div></form></div></div>`;
 }
 
-const SAMPLE_EVENTS = [
-  {
-    id: "sample-event-manali",
-    title: "Sunrise Viewpoint Trek & Chai Social",
-    place: "Old Manali, Himachal",
-    date: "2026-11-15",
-    time: "06:00 AM",
-    vibe: "Adventure",
-    capacity: 14,
-    description: "Catching first morning rays above the valley, followed by steaming chai and mountain stories.",
-    host: "Roammate Community",
-    isEvent: true,
-    sample: true
-  },
-  {
-    id: "sample-event-bali",
-    title: "Canggu Sunset Social & Cliffside Drinks",
-    place: "Echo Beach, Bali",
-    date: "2026-11-20",
-    time: "05:30 PM",
-    vibe: "Foodie",
-    capacity: 20,
-    description: "Relaxed oceanfront gathering for solo wanderers and digital nomads. Good music, coconut drinks, and travel tips.",
-    host: "Roammate Community",
-    isEvent: true,
-    sample: true
-  },
-  {
-    id: "sample-event-goa",
-    title: "Arambol Drum Circle & Beach Bonfire",
-    place: "Arambol Beach, Goa",
-    date: "2026-12-05",
-    time: "07:00 PM",
-    vibe: "Culture",
-    capacity: 25,
-    description: "Sunset acoustics, bonfire acoustic jams, and meeting fellow travelers along the coast.",
-    host: "Roammate Community",
-    isEvent: true,
-    sample: true
-  }
-];
-
 function renderEventCard(id, g){
   const mem = groupMembers(id);
   const isGoing = mem.includes(S.me);
@@ -985,7 +907,6 @@ function renderEventCard(id, g){
 function groupsView(){
   const me=myP()||{};
   const allGroups = { ...S.groups };
-  SAMPLE_EVENTS.forEach(ev => { if(!allGroups[ev.id]) allGroups[ev.id] = ev; });
   let list = Object.entries(allGroups).sort((a,b)=>(a[1].date||a[1].start||"").localeCompare(b[1].date||b[1].start||""));
   
   const isEventsTab = S.groupFilter === "events";
@@ -1020,9 +941,7 @@ function groupsView(){
 }
 
 function groupView(id){
-  const allGroups = { ...S.groups };
-  SAMPLE_EVENTS.forEach(ev => { if(!allGroups[ev.id]) allGroups[ev.id] = ev; });
-  const g=allGroups[id];
+  const g = S.groups[id];
   if(!g){
     if(!S.loaded) return '<div class="spin"></div>';
     return `<button class="back" data-act="back">${ICON.left} All group trips</button><div class="empty">This group was removed.</div>`;
@@ -1343,7 +1262,6 @@ document.addEventListener("click",async e=>{
     }
   }
   else if(a==="like"||a==="pass"){
-    if(!S.canWrite)return toast("View-only access");
     const card=$("#active-card");
     if(card && card.dataset.cid===v){
       card.classList.add(a==="like"?"anim-fly-like":"anim-fly-pass");
@@ -1379,24 +1297,26 @@ document.addEventListener("click",async e=>{
   else if(a==="newevent"){eventModal()}
   else if(a==="opengroup"){S.view={type:"group",id:v};openSub("g"+v,"groups/"+v+"/posts");render();scrollTo(0,0)}
   else if(a==="join"){
-    if(!S.canWrite) return toast("View-only access");
-    S.joins[v+"+"+S.me]={gid:v,uid:S.me,at:Date.now()};
-    render();
-    await safe(()=>S.db.doc("joins/"+v+"+"+S.me).set({gid:v,uid:S.me,at:Date.now()}));
-    trackEvent("event_rsvp",{group_id:v,action:"join"});
-    toast("You're in! Say hi in the group posts.","success");
+    const ok = await safe(()=>S.db.doc("joins/"+v+"+"+S.me).set({gid:v,uid:S.me,at:Date.now()}));
+    if(ok){
+      S.joins[v+"+"+S.me]={gid:v,uid:S.me,at:Date.now()};
+      trackEvent("event_rsvp",{group_id:v,action:"join"});
+      toast("You're in! Say hi in the group posts.","success");
+      render();
+    }
   }
   else if(a==="signout"){await signOut(S.auth)}
   else if(a==="authmode"){S.authMode=v;renderAuth()}
   else if(a==="google"){try{await signInWithPopup(S.auth,new GoogleAuthProvider())}catch(err){authError(err)}}
   else if(a==="reset"){const em=document.querySelector('#authform [name=email]')?.value.trim();if(!em)return toast("Enter your email first");try{await sendPasswordResetEmail(S.auth,em);toast("Password reset email sent")}catch(err){authError(err)}}
   else if(a==="leave"){
-    if(!S.canWrite) return toast("View-only access");
-    delete S.joins[v+"+"+S.me];
-    render();
-    await safe(()=>S.db.doc("joins/"+v+"+"+S.me).delete());
-    trackEvent("event_rsvp",{group_id:v,action:"leave"});
-    toast("You've left this group.","info");
+    const ok = await safe(()=>S.db.doc("joins/"+v+"+"+S.me).delete());
+    if(ok){
+      delete S.joins[v+"+"+S.me];
+      trackEvent("event_rsvp",{group_id:v,action:"leave"});
+      toast("You've left this group.","info");
+      render();
+    }
   }
   else if(a==="opencontact"){contactModal()}
   else if(a==="openguidelines"){guidelinesModal()}
@@ -1455,10 +1375,14 @@ document.addEventListener("submit",async e=>{
     const photos = userPhotos(myP());
     const photoURL = photos[0] || myP()?.photoURL || S.user?.photoURL || "";
     const email = myP()?.email || S.user?.email || "";
-    await saveProfile({name:fd.name.trim(),age:+fd.age,gender:fd.gender,city:fd.city.trim(),bio:fd.bio.trim(),travelStyle:fd.travelStyle,
+    const ok = await saveProfile({name:fd.name.trim(),age:+fd.age,gender:fd.gender,city:fd.city.trim(),bio:fd.bio.trim(),travelStyle:fd.travelStyle,
       interests:pick("interests"),interestedIn:pick("interestedIn"),ageMin:lo,ageMax:hi,photoURL,photos,email});
-    trackEvent("profile_saved",{name:fd.name.trim(),travelStyle:fd.travelStyle});
-    S.editing=false; render(); return;
+    if(ok){
+      trackEvent("profile_saved",{travelStyle:fd.travelStyle});
+      S.editing=false; render();
+      toast("Profile saved! ✨","success");
+    }
+    return;
   }
   const kind=f.dataset.form, v=f.dataset.v;
   if(kind==="msg"){const i=f.querySelector("input");const t=i.value.trim();if(!t)return;i.value="";await sendMsg(v,t)}
@@ -1468,9 +1392,13 @@ document.addEventListener("submit",async e=>{
     await safe(()=>S.db.doc("trips/"+v).update({activities:acts}))}
   else if(kind==="trip"){const fd=Object.fromEntries(new FormData(f));if(fd.end<fd.start)return toast("End date is before start date");
     const ref=S.db.collection("trips").doc();
-    await safe(()=>ref.set({...fd,owner:S.me,invited:v?[v]:[],activities:{},createdAt:Date.now()}));
-    trackEvent("trip_created",{title:fd.title,destination:fd.destination});
-    $("#overlay").innerHTML="";closeSubs();S.tab="trips";S.view={type:"trip",id:ref.id};render();scrollTo(0,0)}
+    const ok = await safe(()=>ref.set({...fd,owner:S.me,invited:v?[v]:[],activities:{},createdAt:Date.now()}));
+    if(ok){
+      trackEvent("trip_created",{days:tripDays(fd)});
+      $("#overlay").innerHTML="";closeSubs();S.tab="trips";S.view={type:"trip",id:ref.id};render();scrollTo(0,0);
+      toast("Trip itinerary created! ✈️","success");
+    }
+  }
   else if(kind==="group"){const fd=Object.fromEntries(new FormData(f));if(fd.end<fd.start)return toast("End date is before start date");
     const tags=[...f.querySelectorAll('[data-chips="gtags"] .chip.on')].map(c=>c.dataset.v);
     const ref=S.db.collection("groups").doc();
@@ -1481,15 +1409,17 @@ document.addEventListener("submit",async e=>{
       host:S.me,
       createdAt:Date.now()
     };
-    S.groups[ref.id] = newGroup;
-    S.joins[ref.id+"+"+S.me] = {gid:ref.id,uid:S.me,at:Date.now()};
-    await safe(async()=>{
+    const ok = await safe(async()=>{
       await ref.set(newGroup);
       await S.db.doc("joins/"+ref.id+"+"+S.me).set({gid:ref.id,uid:S.me,at:Date.now()});
     });
-    trackEvent("group_created",{title:fd.title,place:fd.place});
-    $("#overlay").innerHTML="";S.view={type:"group",id:ref.id};openSub("g"+ref.id,"groups/"+ref.id+"/posts");render();scrollTo(0,0);
-    toast("Expedition published! Gather your crew. 🏔️","success");
+    if(ok){
+      S.groups[ref.id] = newGroup;
+      S.joins[ref.id+"+"+S.me] = {gid:ref.id,uid:S.me,at:Date.now()};
+      trackEvent("group_created",{tags_count:tags.length});
+      $("#overlay").innerHTML="";S.view={type:"group",id:ref.id};openSub("g"+ref.id,"groups/"+ref.id+"/posts");render();scrollTo(0,0);
+      toast("Expedition published! Gather your crew. 🏔️","success");
+    }
   }
   else if(kind==="event"){
     const fd=Object.fromEntries(new FormData(f));
@@ -1500,28 +1430,30 @@ document.addEventListener("submit",async e=>{
       title, place, start: date, end: date, date, time, vibe, capacity, description,
       host: S.me, isEvent: true, type: "event", tags: [vibe, "Event", "Meetup"], createdAt: Date.now()
     };
-    S.groups[ref.id] = newEvent;
-    S.joins[ref.id+"+"+S.me] = {gid:ref.id,uid:S.me,at:Date.now()};
-    await safe(async()=>{
+    const ok = await safe(async()=>{
       await ref.set(newEvent);
       await S.db.doc("joins/"+ref.id+"+"+S.me).set({gid:ref.id,uid:S.me,at:Date.now()});
     });
-    trackEvent("event_created",{title,place});
-    $("#overlay").innerHTML="";
-    S.groupFilter="events";
-    S.view={type:"group",id:ref.id};
-    openSub("g"+ref.id,"groups/"+ref.id+"/posts");
-    render();
-    scrollTo(0,0);
-    toast("Meetup published! You're the host. 🌴","success");
+    if(ok){
+      S.groups[ref.id] = newEvent;
+      S.joins[ref.id+"+"+S.me] = {gid:ref.id,uid:S.me,at:Date.now()};
+      trackEvent("event_created",{vibe});
+      $("#overlay").innerHTML="";
+      S.groupFilter="events";
+      S.view={type:"group",id:ref.id};
+      openSub("g"+ref.id,"groups/"+ref.id+"/posts");
+      render();
+      scrollTo(0,0);
+      toast("Meetup published! You're the host. 🌴","success");
+    }
   }
   else if(kind==="post"){
     const ta=f.querySelector("textarea");
     const t=ta.value.trim();
     if(!t) return;
     ta.value="";
-    await safe(()=>S.db.collection("groups/"+v+"/posts").add({from:S.me,text:t,at:Date.now()}));
-    toast("Post shared with the group! 💬","success");
+    const ok = await safe(()=>S.db.collection("groups/"+v+"/posts").add({from:S.me,text:t,at:Date.now()}));
+    if(ok) toast("Post shared with the group! 💬","success");
   }
   else if(kind==="contact"){
     const fd=Object.fromEntries(new FormData(f));
@@ -1536,7 +1468,7 @@ document.addEventListener("submit",async e=>{
       return;
     }
     window._lastContactTime=now;
-    await safe(async()=>{
+    const ok = await safe(async()=>{
       if(S.db){
         await S.db.collection("feedback").add({
           name:fd.name.trim(),
@@ -1548,9 +1480,11 @@ document.addEventListener("submit",async e=>{
         });
       }
     });
-    trackEvent("contact_form_submitted",{category:fd.category});
-    $("#overlay").innerHTML="";
-    toast("Thank you! Your note has been received. 💌","success");
+    if(ok){
+      trackEvent("contact_form_submitted",{category:fd.category});
+      $("#overlay").innerHTML="";
+      toast("Thank you! Your note has been received. 💌","success");
+    }
   }
   else if(kind==="cookieprefs"){
     const fd=Object.fromEntries(new FormData(f));

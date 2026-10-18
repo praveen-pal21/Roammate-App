@@ -17,7 +17,7 @@ The Roammate team takes security, privacy, and data integrity seriously. This do
 If you discover a security vulnerability or security bug, please **do not report it publicly** through GitHub issues.
 
 Instead, please report it privately:
-1. Send an email with details, reproduction steps, and impact assessment to: **`praveenpal@example.com`** (or create a private GitHub Security Advisory).
+1. Open a private GitHub Security Advisory at: **https://github.com/praveen-pal21/Roammate-App/security/advisories/new** (or email `praveenpal21@users.noreply.github.com`).
 2. You will receive an acknowledgment within 48 hours.
 3. We will collaborate with you to verify and patch the vulnerability before public disclosure.
 

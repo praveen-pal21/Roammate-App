@@ -1,20 +1,77 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model & Schema Definitions
+    // ===============================================================
+    //
+    // Collection: profiles/{uid}
+    //   - name: string (1-60 chars)
+    //   - age: number (18-120)
+    //   - gender: string (0-20 chars)
+    //   - city: string (0-80 chars)
+    //   - bio: string (0-300 chars)
+    //   - travelStyle: string (0-40 chars)
+    //   - interests: list (max 20 items)
+    //   - interestedIn: list (max 10 items)
+    //   - ageMin: number (18-120)
+    //   - ageMax: number (18-120)
+    //   - photos: list (max 6 items)
+    //   - photoURL: string (0-2000 chars)
+    //   - email: string (0-120 chars)
+    //   - updatedAt: number
+    //   - active: bool
+    //
+    // Collection: private/{uid}
+    //   - Owner-only private collection for PII and sensitive user data.
+    //
+    // Collection: groups/{gid}/posts/{postId}
+    //   - from: string (uid of post creator, matching request.auth.uid)
+    //   - text: string (1-500 chars)
+    //   - at: number (timestamp)
+    // ===============================================================
+
     // Authentication & identity helpers
     function signedIn() { return request.auth != null; }
     function me() { return request.auth.uid; }
 
+    // Group authorization helpers
+    function isGroupHost(gid) {
+      return get(/databases/$(database)/documents/groups/$(gid)).data.host == me();
+    }
+    function isGroupMember(gid) {
+      return exists(/databases/$(database)/documents/joins/$(gid + '+' + me()));
+    }
+
+    // Profile schema allow-list and validator
+    function validProfile(d) {
+      return d.keys().hasOnly(['name', 'age', 'gender', 'city', 'bio', 'travelStyle', 'interests', 'interestedIn', 'ageMin', 'ageMax', 'photos', 'photoURL', 'email', 'updatedAt', 'active'])
+        && (!('name' in d) || (d.name is string && d.name.size() > 0 && d.name.size() <= 60))
+        && (!('age' in d) || (d.age is number && d.age >= 18 && d.age <= 120))
+        && (!('gender' in d) || (d.gender is string && d.gender.size() <= 20))
+        && (!('city' in d) || (d.city is string && d.city.size() <= 80))
+        && (!('bio' in d) || (d.bio is string && d.bio.size() <= 300))
+        && (!('travelStyle' in d) || (d.travelStyle is string && d.travelStyle.size() <= 40))
+        && (!('interests' in d) || (d.interests is list && d.interests.size() <= 20))
+        && (!('interestedIn' in d) || (d.interestedIn is list && d.interestedIn.size() <= 10))
+        && (!('ageMin' in d) || (d.ageMin is number && d.ageMin >= 18 && d.ageMin <= 120))
+        && (!('ageMax' in d) || (d.ageMax is number && d.ageMax >= 18 && d.ageMax <= 120))
+        && (!('photos' in d) || (d.photos is list && d.photos.size() <= 6))
+        && (!('photoURL' in d) || (d.photoURL is string && d.photoURL.size() <= 2000))
+        && (!('email' in d) || (d.email is string && d.email.size() <= 120))
+        && (!('updatedAt' in d) || d.updatedAt is number)
+        && (!('active' in d) || d.active is bool);
+    }
+
     // Dating profiles: any signed-in user can browse; users can only edit their own profile.
     match /profiles/{uid} {
       allow read: if signedIn();
-      allow write: if signedIn() && me() == uid
-        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60))
-        && (!('age' in request.resource.data) || (request.resource.data.age is number && request.resource.data.age >= 18 && request.resource.data.age <= 120))
-        && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 300))
-        && (!('city' in request.resource.data) || (request.resource.data.city is string && request.resource.data.city.size() <= 80))
-        && (!('travelStyle' in request.resource.data) || (request.resource.data.travelStyle is string && request.resource.data.travelStyle.size() <= 40))
-        && (!('photos' in request.resource.data) || (request.resource.data.photos is list && request.resource.data.photos.size() <= 6));
+      allow write: if signedIn() && me() == uid && validProfile(request.resource.data);
+    }
+
+    // Private owner-only data (Phase 1 readiness): only the authenticated doc owner can read or write.
+    match /private/{uid} {
+      allow read, write: if signedIn() && me() == uid;
     }
 
     // Likes/passes: readable for mutual match calculation; users only write their own doc.
@@ -64,8 +121,9 @@ service cloud.firestore {
       match /posts/{postId} {
         allow read: if signedIn();
         allow create: if signedIn() && request.resource.data.from == me()
-          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500;
-        allow delete: if signedIn() && resource.data.from == me();
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500
+          && (isGroupMember(gid) || isGroupHost(gid));
+        allow delete: if signedIn() && (resource.data.from == me() || isGroupHost(gid));
       }
     }
 
