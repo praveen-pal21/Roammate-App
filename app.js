@@ -71,15 +71,23 @@ const S = {db:null,user:null,me:null,canWrite:true,profiles:{},likes:{},chats:{}
   tab:"discover",view:null,draft:{},sub:{},seenMatches:null,groupFilter:"foryou",editing:false};
 
 // ---------- helpers ----------
+const IS_DEV = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+const logWarn = (...args) => { if(IS_DEV) console.warn(...args); };
+const logErr = (...args) => { if(IS_DEV) console.error(...args); };
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const esc = s => String(s ?? "").replace(/[&<>"'`]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;","`":"&#96;"}[c]));
+const safeURL = url => {
+  const u = String(url || "").trim();
+  if(/^https?:\/\//i.test(u) || /^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(u) || u.startsWith("blob:")) return u;
+  return "";
+};
 const hash = s => {let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))|0;return Math.abs(h)};
 const color = id => PALETTE[hash(id)%PALETTE.length];
 const initial = n => esc((n||"?").trim()[0]?.toUpperCase()||"?");
-const userPhotos = p => (p?.photos && Array.isArray(p.photos) && p.photos.length) ? p.photos : (p?.photoURL ? [p.photoURL] : []);
+const userPhotos = p => ((p?.photos && Array.isArray(p.photos) && p.photos.length) ? p.photos : (p?.photoURL ? [p.photoURL] : [])).map(safeURL).filter(Boolean);
 const av = (id,name,cls="",extra="") => {
   const p = S.profiles[id] || (id===S.me ? myP() : null);
-  const photo = p?.photoURL || (p?.photos && p.photos[0]) || (id===S.me ? (myP()?.photoURL || S.user?.photoURL) : "");
+  const photo = safeURL(p?.photoURL || (p?.photos && p.photos[0]) || (id===S.me ? (myP()?.photoURL || S.user?.photoURL) : ""));
   if(photo) return `<div class="avatar ${cls} has-img" style="background-image:url('${esc(photo)}');${extra}"><img src="${esc(photo)}" alt="${esc(name || 'Avatar')}" loading="lazy" decoding="async" style="opacity:0;position:absolute;pointer-events:none;width:1px;height:1px"></div>`;
   return `<div class="avatar ${cls}" style="background:${color(id)};${extra}">${initial(name)}</div>`;
 };
@@ -377,7 +385,7 @@ async function compressImages(files, maxSize = 360, quality = 0.82) {
     try {
       out.push(await compressImage(f, maxSize, quality));
     } catch (err) {
-      console.warn("Failed to compress file", f.name, err);
+      logWarn("Failed to compress file", f.name, err);
     }
   }
   return out;
@@ -449,7 +457,7 @@ async function safe(fn){
     if(e?.code==="permission-denied") toast("You don't have permission to do that.");
     else if(e?.code==="resource-exhausted") toast("The app's storage quota is full.");
     else toast("Couldn't save — please try again.");
-    console.error(e);
+    logErr(e);
   }
 }
 async function saveProfile(data){
@@ -457,8 +465,9 @@ async function saveProfile(data){
     if(!S.likes[S.me]) await S.db.doc("likes/"+S.me).set({liked:[],passed:[]});});
 }
 async function decide(id,like){
-  trackEvent(like ? "swipe_like" : "swipe_pass", { profile_id: id });
   const l=myLikes(); const liked=[...(l.liked||[])], passed=[...(l.passed||[])];
+  if(liked.includes(id) || passed.includes(id)) return;
+  trackEvent(like ? "swipe_like" : "swipe_pass", { profile_id: id });
   (like?liked:passed).push(id);
   S.likes[S.me]={liked,passed}; render();
   await safe(()=>S.db.doc("likes/"+S.me).set({liked,passed}));
@@ -469,12 +478,19 @@ async function decide(id,like){
     showMatch(id);
   }
 }
+let _lastMsgTime = 0;
 async function sendMsg(cid,text){
+  const now = Date.now();
+  if(now - _lastMsgTime < 400){
+    toast("You're typing fast! Please pause a moment.", "warning");
+    return;
+  }
+  _lastMsgTime = now;
   trackEvent("chat_message_sent", { chat_id: cid });
   const other=cid.split("+").find(x=>x!==S.me);
   await safe(async()=>{
     await S.db.doc("chats/"+cid).set({members:[S.me,other].sort(),last:text.slice(0,120),lastFrom:S.me,lastAt:Date.now()});
-    await S.db.collection("chats/"+cid+"/msgs").add({from:S.me,text,at:Date.now()});
+    await S.db.collection("chats/"+cid+"/msgs").add({from:S.me,text:text.slice(0,1000),at:Date.now()});
   });
 }
 
@@ -484,16 +500,16 @@ function subscribeAll(){
     const o={};snap.docs.forEach(d=>{if(d.exists)o[d.id]=map(d.data())});S[key]=o;
     if(key==="likes") checkNewMatches();
     render();
-  },e=>console.warn(name,e));
-  S.db.collection("profiles").onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{if(d.exists)o[d.id]=d.data()});S.profiles=o;S.loaded=true;render()},e=>{console.warn(e);S.loaded=true;render()}); coll("likes","likes");
+  },e=>logWarn(name,e));
+  S.db.collection("profiles").onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{if(d.exists)o[d.id]=d.data()});S.profiles=o;S.loaded=true;render()},e=>{logWarn(e);S.loaded=true;render()}); coll("likes","likes");
   const tripSets={own:{},inv:{}};
-  const tripSub=(key,q)=>q.onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{if(d.exists)o[d.id]=d.data()});tripSets[key]=o;S.trips={...tripSets.own,...tripSets.inv};render()},e=>console.warn("trips",e));
+  const tripSub=(key,q)=>q.onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{if(d.exists)o[d.id]=d.data()});tripSets[key]=o;S.trips={...tripSets.own,...tripSets.inv};render()},e=>logWarn("trips",e));
   tripSub("own",S.db.collection("trips").where("owner","==",S.me));
   tripSub("inv",S.db.collection("trips").where("invited","array-contains",S.me));
   coll("groups","groups"); coll("joins","joins"); coll("announcements","announcements");
   S.db.collection("chats").where("members","array-contains",S.me).onSnapshot(snap=>{
     const o={};snap.docs.forEach(d=>{if(d.exists)o[d.id]=d.data()});S.chats=o;render();
-  },e=>console.warn("chats",e));
+  },e=>logWarn("chats",e));
 }
 function checkNewMatches(){
   const m=matches();
@@ -506,7 +522,7 @@ function openSub(key,path,order){
   S.sub.un=S.db.collection(path).orderBy("at","asc").limit(300).onSnapshot(snap=>{
     S.sub.items=snap.docs.filter(d=>d.exists).map(d=>({id:d.id,...d.data()}));render();
     const box=$(".msgs");if(box)box.scrollTop=box.scrollHeight;
-  },e=>console.warn(path,e));
+  },e=>logWarn(path,e));
 }
 function closeSubs(){if(S.sub.un){S.sub.un();S.sub={}}}
 
@@ -1153,7 +1169,7 @@ function ensurePhotoInput(allowMultiple = true){
         await saveProfile({ ...cur, photos: combined, photoURL: mainPhoto });
         toast(files.length > 1 ? `${compressedList.length} photos added! ✨` : "Photo updated! ✨");
       } catch(err) {
-        console.error(err);
+        logErr(err);
         toast("Could not process photo(s).");
       } finally {
         fi.value = "";
@@ -1411,8 +1427,24 @@ document.addEventListener("submit",async e=>{
   e.preventDefault(); const f=e.target;
   if(f.id==="authform"){
     const fd=Object.fromEntries(new FormData(f));const btn=f.querySelector("button[type=submit]");btn.disabled=true;
-    try{ if(S.authMode==="signup") await createUserWithEmailAndPassword(S.auth,fd.email.trim(),fd.password);
-         else await signInWithEmailAndPassword(S.auth,fd.email.trim(),fd.password); }
+    const email = (fd.email || "").trim();
+    const pw = fd.password || "";
+    if(!email || !email.includes("@")){
+      btn.disabled = false;
+      return toast("Please enter a valid email address.", "warning");
+    }
+    if(S.authMode === "signup"){
+      if(pw.length < 8){
+        btn.disabled = false;
+        return toast("Password must be at least 8 characters long.", "warning");
+      }
+      if(!/[0-9]/.test(pw) || !/[a-zA-Z]/.test(pw)){
+        btn.disabled = false;
+        return toast("Password must contain both letters and numbers.", "warning");
+      }
+    }
+    try{ if(S.authMode==="signup") await createUserWithEmailAndPassword(S.auth,email,pw);
+         else await signInWithEmailAndPassword(S.auth,email,pw); }
     catch(err){authError(err);btn.disabled=false}
     return;
   }
@@ -1537,7 +1569,7 @@ function authError(err){
   const m={"auth/invalid-credential":"Wrong email or password.","auth/email-already-in-use":"That email already has an account — log in instead.",
     "auth/weak-password":"Password must be at least 6 characters.","auth/invalid-email":"That email doesn't look right.",
     "auth/popup-closed-by-user":"Google sign-in was closed.","auth/too-many-requests":"Too many attempts — try again in a bit."};
-  toast(m[err?.code]||"Sign-in failed. Please try again."); console.error(err);
+  toast(m[err?.code]||"Sign-in failed. Please try again."); logErr(err);
 }
 function renderAuth(){
   $("#nav").hidden=true; const up=S.authMode!=="login";

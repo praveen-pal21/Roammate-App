@@ -1,22 +1,31 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Authentication & identity helpers
     function signedIn() { return request.auth != null; }
     function me() { return request.auth.uid; }
 
-    // Dating profiles: any signed-in user can browse; you can only edit your own.
+    // Dating profiles: any signed-in user can browse; users can only edit their own profile.
     match /profiles/{uid} {
       allow read: if signedIn();
-      allow write: if signedIn() && me() == uid;
+      allow write: if signedIn() && me() == uid
+        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60))
+        && (!('age' in request.resource.data) || (request.resource.data.age is number && request.resource.data.age >= 18 && request.resource.data.age <= 120))
+        && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 300))
+        && (!('city' in request.resource.data) || (request.resource.data.city is string && request.resource.data.city.size() <= 80))
+        && (!('travelStyle' in request.resource.data) || (request.resource.data.travelStyle is string && request.resource.data.travelStyle.size() <= 40))
+        && (!('photos' in request.resource.data) || (request.resource.data.photos is list && request.resource.data.photos.size() <= 6));
     }
 
-    // Likes/passes: readable so mutual likes can be detected; you only write your own.
+    // Likes/passes: readable for mutual match calculation; users only write their own doc.
     match /likes/{uid} {
       allow read: if signedIn();
-      allow write: if signedIn() && me() == uid;
+      allow write: if signedIn() && me() == uid
+        && (!('liked' in request.resource.data) || request.resource.data.liked is list)
+        && (!('passed' in request.resource.data) || request.resource.data.passed is list);
     }
 
-    // 1:1 chats: only the two members can read or write. Chat id = "<uidA>+<uidB>" (sorted).
+    // 1:1 chats: only the two members can read or write. Chat id = "<uidA>+<uidB>" (lexicographically sorted).
     match /chats/{cid} {
       allow read: if signedIn() && me() in resource.data.members;
       allow create, update: if signedIn()
@@ -27,6 +36,7 @@ service cloud.firestore {
       match /msgs/{msgId} {
         allow read: if signedIn() && me() in get(/databases/$(database)/documents/chats/$(cid)).data.members;
         allow create: if signedIn() && request.resource.data.from == me()
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 1000
           && me() in get(/databases/$(database)/documents/chats/$(cid)).data.members;
       }
     }
@@ -34,21 +44,27 @@ service cloud.firestore {
     // Personal trips: visible to the owner and invited matches; both can add activities.
     match /trips/{tripId} {
       allow read: if signedIn() && (me() == resource.data.owner || me() in resource.data.invited);
-      allow create: if signedIn() && request.resource.data.owner == me();
+      allow create: if signedIn() && request.resource.data.owner == me()
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 100
+        && (!('destination' in request.resource.data) || (request.resource.data.destination is string && request.resource.data.destination.size() <= 100));
       allow update: if signedIn() && (me() == resource.data.owner || me() in resource.data.invited)
         && request.resource.data.owner == resource.data.owner;
       allow delete: if signedIn() && me() == resource.data.owner;
     }
 
-    // Group trips: everyone can browse; only the host edits or deletes.
+    // Group trips & events: everyone signed in can browse; only the host edits or deletes.
     match /groups/{gid} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.host == me();
+      allow create: if signedIn() && request.resource.data.host == me()
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 80
+        && (!('place' in request.resource.data) || (request.resource.data.place is string && request.resource.data.place.size() <= 80))
+        && (!('capacity' in request.resource.data) || (request.resource.data.capacity is number && request.resource.data.capacity >= 2 && request.resource.data.capacity <= 100));
       allow update, delete: if signedIn() && resource.data.host == me();
 
       match /posts/{postId} {
         allow read: if signedIn();
-        allow create: if signedIn() && request.resource.data.from == me();
+        allow create: if signedIn() && request.resource.data.from == me()
+          && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 500;
         allow delete: if signedIn() && resource.data.from == me();
       }
     }
@@ -61,17 +77,18 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == me();
     }
 
-    // Maker announcements & offers: readable by all signed-in users, read-only for clients.
+    // Maker announcements & offers: readable by all signed-in users, strictly read-only for clients.
     match /announcements/{aid} {
       allow read: if signedIn();
       allow write: if false;
     }
 
-    // Feedback & contact submissions: signed in users can create submissions; read/update/delete disallowed for clients
+    // Feedback & contact submissions: signed in users can create submissions; read/update/delete disallowed for clients.
     match /feedback/{fid} {
-      allow create: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.email is string && request.resource.data.email.size() > 0 && request.resource.data.email.size() <= 120
+        && request.resource.data.message is string && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 2000;
       allow read, update, delete: if false;
     }
   }
 }
-
